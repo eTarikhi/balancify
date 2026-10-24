@@ -1,0 +1,12 @@
+test_empty_directory_is_an_error (test_analyze.AnalyzeTests.test_empty_directory_is_an_error) ... ok
+test_loads_only_iperf3_json_and_groups_repetitions (test_analyze.AnalyzeTests.test_loads_only_iperf3_json_and_groups_repetitions) ... ok
+test_missing_directory_does_not_substitute_simulated_results (test_analyze.AnalyzeTests.test_missing_directory_does_not_substitute_simulated_results) ... ok
+test_p95_uses_nearest_rank (test_analyze.AnalyzeTests.test_p95_uses_nearest_rank) ... ok
+test_rejects_nonpositive_and_nonfinite_throughput (test_analyze.AnalyzeTests.test_rejects_nonpositive_and_nonfinite_throughput) ... WARN: failed to parse iperf3 result /tmp/tmpazlztcyz/nan_rep1.json: sum_received.bits_per_second must be finite and positive
+WARN: failed to parse iperf3 result /tmp/tmpazlztcyz/zero_rep1.json: sum_received.bits_per_second must be finite and positive
+ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.010s
+
+OK

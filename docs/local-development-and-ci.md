@@ -1,140 +1,184 @@
-# Local development, CI execution, and monitoring
+# Native Windows 11 development, CI, and PR workflow
 
-This guide maps repository setup to `.github/workflows/ci.yml` and provides a local runner that can optionally push a previously committed branch after the local checks pass. It keeps local validation separate from hardware/driver acceptance and never signs, installs, or loads the driver.
+This repository contains a Windows NDIS/WDF driver and Rust workspace. **Windows 11 x64 with PowerShell is the recommended local development environment; WSL/Linux is not required.** The native runner uses the MSVC Rust toolchain, runs the Windows Rust test/build, compiles the portable C contract tests with MSVC, validates SBOMs on Windows, and can build both WDK architectures. Git Bash is used only for existing POSIX policy/netem scripts. GitHub Actions remains the independent Linux/Windows CI gate.
 
-## 1. What the CI pipeline runs
+## 1. Project and CI overview
 
-| Job | GitHub runner | Local equivalent |
-|---|---|---|
-| Dependency + crypto policy audit | Ubuntu 24.04 | `sh tools/ci/audit-deps.sh` |
-| Lab analysis and CI Python tests; netem safety; packet/OID contracts | Ubuntu 24.04 | `tools/ci/local-ci.sh` runs the Python unittest suites, `sh -n` plus `tools/lab/test_netem_rig.sh`, and `tools/ci/test-driver-packets.sh` |
-| Rust workspace tests | Ubuntu 24.04 and Windows | Ubuntu/WSL local runner runs `cargo test --workspace --all-targets --no-fail-fast`; Windows parity is confirmed by remote CI |
-| Rust release build and SPDX 2.3/3.0.1 inventories | Ubuntu 24.04 | Local full profile builds release and generates/validates both SPDX files with the pinned validators |
-| WDK x64 and ARM64 compile/link plus PE verification | Windows Server 2022 | `tools/ci/local-wdk-build.ps1` on Windows with the WDK; also run remotely on every CI push |
-| Pages deployment | Ubuntu 24.04, main only | Not part of the CI workflow runner; build/test the static portal locally with `python3 -m unittest discover -s tools/ci -p 'test_*.py'` |
+- Rust 2021 workspace: control plane, tunnel/crypto, IPC, service, relay, client, lab shell CLI, installer.
+- Windows driver: first-party C NDIS/WDF source in `driver/`, built using MSBuild and the WDK.
+- Tooling: Python test/SBOM helpers, POSIX shell policy and lab scripts, PowerShell WDK/native-Windows runner.
+- GitHub Actions (`.github/workflows/ci.yml`): dependency audit; Linux and Windows Rust tests; native x64 MSVC quick checks (including portable driver C/OID tests); WSL-compatible Ubuntu 24.04 quick validation; release build and SPDX validation; Windows x64 and ARM64 WDK builds and PE checks.
+- The WSL parity job runs the same Bash quick-validation entrypoint and Ubuntu 24.04 userland used inside WSL2. GitHub-hosted Ubuntu is not itself a WSL VM, so this validates the Linux/WSL userland path rather than WSL-kernel integration.
+- The static Pages deploy workflow is separate and publishes from `main`.
+- No Docker/Compose workflow or ML training scripts are present. The app shell is a lab CLI, not the planned production WinUI GUI.
 
-GitHub-hosted Windows jobs are not faithfully emulated by `act` or by Linux. The local Linux/WSL script intentionally reports that it does not run the WDK jobs; the `--push` option then waits for actual GitHub Actions, including both WDK architectures and the Windows Rust job.
+The local Windows runner covers the Windows-native work, but it does not replicate Linux AddressSanitizer/UndefinedBehaviorSanitizer instrumentation. The remote Linux job still runs those instrumented portable C tests. No local or remote build proves driver signing, installation, runtime packet flow, HVCI, or hardware acceptance.
 
-## 2. Requirements
+## 2. Windows 11 x64 prerequisites
 
-### Canonical Linux / WSL2 environment
+Use **Developer PowerShell for Visual Studio 2022** so `cl.exe` and `msbuild.exe` are available. A regular Administrator PowerShell window does not automatically configure the MSVC toolchain; launching `powershell.exe` from it will not add `cl.exe` to PATH.
 
-Use Ubuntu 24.04 natively or in WSL2 for the local CI-equivalent software suite. CI currently uses Ubuntu 24.04 and Python 3.12.
+- Rust stable for `x86_64-pc-windows-msvc`, including Cargo. Install `rustfmt` and `clippy` if desired.
+- Visual Studio 2022 / Build Tools 17.x with the C++ build tools.
+- Windows SDK/WDK target 10.0.26100.0 and WDK 10.0.26100.6584 (the CI pin), including x64 and ARM64 libraries.
+- Python 3.10+ via the Windows `py -3` launcher (CI uses Python 3.12).
+- Git for Windows (provides `bash.exe`, `sh`, `sed`, `awk`, `grep`, and `find` for the POSIX policy and dry-run lab scripts).
+- GitHub CLI (`gh`) and a configured `origin` are needed only for push/PR automation; local-only validation does not require `gh` or GitHub authentication.
+- Network access on the first Cargo/Python dependency fetch and SPDX validator install.
 
-- Git, Bash, POSIX `sh`, `coreutils` (`timeout`, `tee`, `seq`), and `cc`/GCC with AddressSanitizer and UndefinedBehaviorSanitizer support.
-- Python 3.12 (3.10 minimum for the local runner), `venv`, and pip.
-- Rust stable via rustup, including `cargo` and `rustc`.
-- GitHub CLI (`gh`) authenticated for optional remote monitoring/push. Local-only testing does not need GitHub authentication.
-- Network access when first fetching Cargo crates or pinned Python validators. The validator virtual environment and logs are stored under ignored `target/local-ci/`.
+### Install/activate Rust on Windows
 
-Typical Ubuntu bootstrap (install `gh` using the current GitHub CLI installation instructions for your distribution):
+If `winget install --id Rustlang.Rustup --exact` reports success but `rustup` is still not recognized, run the installed bootstrapper. WinGet may install `rustup-init.exe` without installing the toolchain or updating the current shell's PATH:
 
-```sh
-sudo apt update
-sudo apt install --yes build-essential python3 python3-venv python3-pip git curl
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-. "$HOME/.cargo/env"
-rustup toolchain install stable --profile minimal
-# Install GitHub CLI separately if you want --push/remote monitoring.
+```powershell
+winget install --id Rustlang.Rustup --exact
+$rustupInit = Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet" -Filter rustup-init.exe -File -Recurse -ErrorAction SilentlyContinue |
+    Select-Object -First 1 -ExpandProperty FullName
+if (-not $rustupInit) { throw 'rustup-init.exe was not found under the WinGet package directory.' }
+& $rustupInit -y --default-toolchain stable --profile minimal
 ```
 
-In WSL2, clone the repository inside the Linux filesystem (for example `~/src/BalanciFy`) rather than `/mnt/c/...` for faster Cargo builds and more reliable file permissions. Configure Git identity and SSH or HTTPS remote access using your normal secure credential manager. Never put a GitHub token in a script, `.env` file, or command history.
+Close and reopen Developer PowerShell, then verify/install the toolchain:
 
-### Native Windows WDK environment (optional local driver compile)
-
-- Windows 11 x64 or Windows Server 2022; Visual Studio 2022 / Build Tools with MSBuild 17.x and the C++ build tools.
-- Windows Driver Kit 10.0.26100.6584 (the CI pin), plus Windows SDK/WDK headers and libraries for target platform 10.0.26100.0.
-- Rust stable, Python launcher `py -3`, Git, and PowerShell. Run from Developer PowerShell so `msbuild` is on `PATH`.
-- Build both `x64` and `ARM64`; the WDK host toolchain is x64. The script writes outputs/logs below `target/local-wdk/` and validates PE architecture, required mitigation flags, and the empty certificate table.
-
-The local WDK script uses `SignMode=Off`. It does not require a signing certificate and does not install/load the `.sys` file. Use WSL2 for the full portable suite; use native Windows for the additional WDK compile check. The ASan/UBSan C fixtures are designed for the Linux CI compiler environment.
-
-## 3. First-time repository setup
-
-```sh
-git clone https://github.com/eTarikhi/BalanciFy.git
-cd BalanciFy
+```powershell
 rustup toolchain install stable --profile minimal
-cargo fetch --locked
-python3 -m venv target/local-ci/venv
+rustup component add rustfmt clippy --toolchain stable
+rustc -vV   # host should be x86_64-pc-windows-msvc
+cargo --version
 ```
 
-The local CI runner creates/reuses that venv and installs the same pinned SPDX validators used by Actions: `spdx-tools==0.8.5` and `spdx3-validate==0.0.7`. It does not change the user's system Python packages. Cargo outputs, SBOM files, local logs, and local WDK products live in ignored `target/` or the repository's existing ignored SBOM paths.
+If the command is still missing in the current shell, add Cargo's bin directory for that session and check again:
 
-For optional GitHub push/watch mode:
+```powershell
+$env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"
+rustup --version
+```
 
-```sh
+The driver build requires the VS C++ workload and WDK in addition to Rust. The WDK helper builds unsigned files only.
+
+### Configure GitHub CLI
+
+Run these in PowerShell (or the native Developer PowerShell):
+
+```powershell
 gh auth login
+gh auth setup-git
 gh auth status
 git remote -v
+git config --global user.name "Your Name"
+git config --global user.email "you@example.com"
 ```
 
-Use the configured `origin`; do not paste credentials into chat or repository files.
+Keep credentials in Git/`gh` secure credential storage, not in scripts or repository files.
 
-## 4. Local commands and daily workflow
+## 3. Native local validation
 
-### Quick checks (no Rust build or SBOM validation)
+Run all commands from the repository root in Developer PowerShell. Before starting, confirm the compiler is available there:
+
+```powershell
+Get-Command cl.exe
+cl.exe /Bv
+```
+
+If `cl.exe` is missing, install/modify Visual Studio 2022 or Build Tools and select **Desktop development with C++** plus the MSVC v143 x64/x86 tools. Then close the regular PowerShell window and launch **Developer PowerShell for VS 2022** from the Start menu. If script execution policy blocks local scripts, use `-ExecutionPolicy Bypass` for that invocation.
+
+### Fast checks
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\ci\local-ci-windows.ps1 -Quick
+```
+
+Quick mode checks dependency policy, Python suites, netem script syntax/safety, and the portable C/OID contracts compiled with MSVC. It does not build Rust, generate SBOMs, or build the WDK driver; it cannot push.
+
+### Full Windows-native suite
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\ci\local-ci-windows.ps1
+```
+
+The full profile performs:
+
+1. Dependency/crypto policy audit using Git Bash.
+2. Python lab and CI unit tests.
+3. Netem dry-run/safety checks (no live traffic is generated).
+4. Portable packet/queue/OID C contract tests compiled and run natively with MSVC.
+5. `cargo test --workspace --all-targets --no-fail-fast` using native Windows Rust.
+6. `cargo build --release --workspace`.
+7. SPDX 2.3 and 3.0.1 generation and validation using an isolated Python venv under ignored `target/local-ci-windows/`. SPDX 3.0.1 checks use `tools/ci/validate_spdx3.py`, which inspects the validator result and fails closed even if the third-party CLI emits schema errors with a zero exit code.
+8. x64 and ARM64 WDK build and PE verification with `tools/ci/local-wdk-build.ps1`.
+
+To skip the local WDK build temporarily (remote CI still runs it):
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\ci\local-ci-windows.ps1 -SkipWdk
+```
+
+Logs are captured under `target/local-ci-windows/logs/<UTC timestamp>/`. WDK artifacts and logs are under `target/local-wdk/`. The C fixture tests run with strict MSVC warnings on Windows; ASan/UBSan coverage is provided by the remote Ubuntu workflow.
+
+### Individual Windows build/test commands
+
+```powershell
+cargo fetch --locked                                      # fetch locked Rust dependencies
+cargo test --workspace --all-targets --no-fail-fast       # run all workspace tests on Windows
+cargo build --release --workspace                         # optimized Windows workspace build
+powershell -ExecutionPolicy Bypass -File tools\ci\test-driver-packets.ps1
+powershell -ExecutionPolicy Bypass -File tools\ci\local-wdk-build.ps1
+powershell -ExecutionPolicy Bypass -File tools\ci\local-wdk-build.ps1 -Architecture x64
+powershell -ExecutionPolicy Bypass -File tools\ci\local-wdk-build.ps1 -Architecture ARM64
+```
+
+The WDK helper checks architecture, required mitigation flags, and unsigned status. It does not sign, install, or load the driver.
+
+## 4. Push after validation and automate PR creation
+
+Commit changes on a clean topic branch first. `local-ci-windows.ps1 -Push` runs the full Windows-native suite, checks that the branch is not the repository default branch and that local history contains the remote tip, pushes the exact tested commit without force, then waits for push-triggered GitHub CI:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\ci\local-ci-windows.ps1 -Push
+```
+
+The end-to-end PR orchestrator does the same local validation/push, creates or reuses an open PR targeting `main`, waits for push CI and PR CI, and checks the PR head still matches the validated SHA:
+
+```powershell
+# Validate, push, create/reuse PR, and wait for CI; leave the PR open.
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\ci\pr-workflow.ps1
+
+# Same gates, then merge using a merge commit (explicit opt-in).
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\ci\pr-workflow.ps1 -Merge
+```
+
+`-Merge` is opt-in; without it the PR remains open. The workflow does not stage or create commits, force-push, or use GitHub auto-merge. It only merges after local validation, push-triggered CI, PR-triggered CI, PR check statuses, and an unchanged validated head SHA. GitHub branch protections still apply. A PR submission runs push CI and PR CI separately, so the remote suite runs twice for that commit.
+
+Manual GitHub commands remain available:
+
+```powershell
+gh workflow list
+gh run list --workflow ci.yml --branch (git branch --show-current)
+gh run watch RUN_ID --exit-status --interval 20
+gh pr checks PR_NUMBER --watch
+gh pr view PR_NUMBER
+```
+
+## 5. Development, debugging, and limits
+
+```powershell
+$env:RUST_BACKTRACE = '1'
+cargo test --workspace --all-targets --no-fail-fast
+py -3 -m unittest discover -s tools\ci -p 'test_*.py' -v
+```
+
+Rust panic backtraces are enabled with `RUST_BACKTRACE=1`; repository-wide `RUST_LOG` configuration is not defined. Inspect the PowerShell transcript and per-step output under `target/local-ci-windows/logs/`; WDK build logs are under `target/local-wdk/`.
+
+A passing local or GitHub build does **not** establish signed installation, Driver Verifier, HVCI/VBS runtime, NDIS packet-path behavior, real netem/Rig B throughput, clean-machine install/rollback, or hardware acceptance. Treat those as pending until exercised and evidenced on the designated Windows VM/hardware. The relay's `lab-crypto` mode has no confidentiality and must only be used in an isolated lab. `tools/lab/netem-rig.sh --apply` remains a separately gated Linux lab operation; the Windows local CI runner only runs its safe syntax/dry-run checks.
+
+## 6. Optional Linux parity runner
+
+The older Bash runner is optional and is not required for Windows development. It can still be used by Linux contributors for the Linux-specific ASan/UBSan C fixtures:
 
 ```sh
 bash tools/ci/local-ci.sh --quick
-```
-
-This runs the dependency audit, lab Python tests, `tools/ci` Python tests, netem script syntax/safety checks, and portable driver tests. It cannot push.
-
-### Full local software CI
-
-```sh
 bash tools/ci/local-ci.sh
-```
-
-This runs the quick checks plus Rust workspace tests, release build, SPDX 2.3 generation/validation, and SPDX 3.0.1 generation/validation. It does not run WDK or native Windows jobs on Linux/WSL.
-
-For separate local WDK build and PE checks, open Developer PowerShell in the repository:
-
-```powershell
-pwsh -File tools/ci/local-wdk-build.ps1
-# or just one architecture
-pwsh -File tools/ci/local-wdk-build.ps1 -Architecture x64
-pwsh -File tools/ci/local-wdk-build.ps1 -Architecture ARM64
-```
-
-### Push only after local success, then watch remote CI
-
-Commit the intended source changes first, then run the full local suite in WSL/Linux:
-
-```sh
 bash tools/ci/local-ci.sh --push
 ```
 
-`--push` is deliberately strict and safe:
-
-1. Requires a clean worktree and a named `arena/*` branch (no detached HEAD, direct `main` push, or uncommitted changes).
-2. Confirms `origin`, GitHub CLI authentication, and that local history contains the remote branch tip.
-3. Runs every full-profile local check; on any failure, stops without pushing.
-4. Confirms the checked-out commit/worktree did not change during validation, then performs a normal non-force `git push` of that exact HEAD.
-5. Watches the GitHub Actions `CI` run for that commit and returns nonzero if the remote run fails or times out.
-
-The script does **not** stage or create commits. Remote CI is triggered by the push, so the commit is already pushed when remote checks begin. If remote CI fails, the script reports failure and leaves the pushed commit in place; it never rewrites or force-pushes history. Configure the timeout with `LOCAL_CI_REMOTE_TIMEOUT_SECONDS` (default 5400 seconds).
-
-To manually dispatch the GitHub workflow for an already-pushed branch without pushing again:
-
-```sh
-gh workflow run ci.yml --ref "$(git branch --show-current)"
-gh run list --workflow ci.yml --branch "$(git branch --show-current)"
-# Then monitor the returned run ID:
-gh run watch RUN_ID --exit-status --interval 20
-```
-
-The workflow includes `workflow_dispatch` for this operator-triggered run. GitHub requires a manually dispatched workflow to exist on the repository's default branch, so this command becomes available after the configuration change is merged; until then, use `--push` to trigger CI on the review branch. Pushes to `main`/`arena/*` and pull requests continue to trigger automatically.
-
-## 5. Logs, monitoring, and result interpretation
-
-- Local output is streamed to the terminal and preserved per step at `target/local-ci/logs/<UTC timestamp>/`; the summary is `summary.txt`. A failed step stops the runner and points to its log.
-- Local driver outputs and logs are under `target/local-wdk/`.
-- During a remote run, use `gh run list --branch <branch>`, `gh run view <run-id>`, and `gh run watch <run-id> --exit-status`. For PR status, use `gh pr checks <number> --watch`.
-- On a local pass followed by remote failure, compare local logs with the failed GitHub job logs/artifacts. The WDK build logs and unsigned driver artifacts are published by CI; they are not release-signed products.
-- The local Linux runner is a development gate, not evidence of Windows runtime acceptance. The netem checks are deliberately dry-run/safety tests and do not run live traffic or fabricate measurements.
-
-## 6. What remains outside local CI
-
-Neither this runner nor a green Actions check proves driver installation, signing/attestation, live NDIS packet delivery, scheduler/steering behavior, Driver Verifier, HVCI/VBS, real netem/Rig B throughput, clean-machine install/rollback, or hardware performance. Keep those acceptance items pending until executed on the designated Windows VM and hardware setup and recorded with evidence. See `docs/phase2/next-steps.md`, `docs/phase2/hvci-readiness.md`, and `docs/phase2/throughput-rows.md`.
+The Windows-native runner is the recommended path for Windows 11 developers; GitHub Actions remains the cross-platform source of truth for required Linux and Windows jobs.

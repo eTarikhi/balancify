@@ -1,0 +1,14 @@
+1/6  runtime dependencies are first-party, or vetted and exactly pinned
+  every non-path dependency is allowlisted and exactly pinned
+2/6  the lock file resolves nothing that is not allowlisted
+  every locked package is a workspace member or on the allowlist
+3/6  the null cipher cannot reach a shipped build (ADR-0002)
+  PassThrough is compiled only for tests / the lab-crypto feature
+4/6  the lab relay cannot be started in the clear
+  a release build of balancify-relay refuses to start (exit 2)
+5/6  driver control access and injected-packet lifetime are guarded
+  privileged ACL, operation access bits, and deferred packet-buffer ownership are enforced
+6/6  Windows key storage defaults to DPAPI and uses private atomic files
+  DPAPI is enabled by default; key files use create_new, Unix 0600, atomic rename, and zeroized plaintext copies
+
+policy audit passed

@@ -147,10 +147,10 @@ impl TunnelCipher {
         salt
     }
 
-    /// Rekey: derive a new key from the current one, for forward secrecy of
-    /// older messages (Sec.11.3). One-way: old key cannot be derived from new.
-    /// Matches Noise's `REKEY(k)` in spirit (encrypt zeros with max nonce) but
-    /// uses HKDF-BLAKE2s for consistency with the handshake's KDF.
+    /// Derive the next one-way key from the current key. This is a KDF
+    /// primitive, not a live transport update: peers must coordinate when the
+    /// returned cipher becomes active or their session will desynchronize.
+    /// Uses HKDF-BLAKE2s for consistency with the handshake's KDF.
     pub fn rekey(&self) -> Option<Self> { Self::rekey_from(&self.key, self.salt) }
 
     /// Rekey from explicit old key bytes, preserving the salt.

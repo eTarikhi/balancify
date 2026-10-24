@@ -1,0 +1,105 @@
+warning: field `session` is never read
+   --> crates/tunnel/src/lib.rs:230:5
+    |
+225 | struct RetxEntry {
+    |        --------- field in this struct
+...
+230 |     session: u64,
+    |     ^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `balancify-tunnel` (lib) generated 1 warning
+warning: constant `TX_PACKET_OUTPUT_LEN` is never used
+  --> crates/service/src/driver_device.rs:19:7
+   |
+19 | const TX_PACKET_OUTPUT_LEN: usize = TX_PACKET_HEADER_LEN + MAX_INNER_PACKET_LEN;
+   |       ^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: constant `MAX_MESSAGE_UTF16_UNITS` is never used
+   --> crates/service/src/etw.rs:193:7
+    |
+193 | const MAX_MESSAGE_UTF16_UNITS: usize = 8 * 1024;
+    |       ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `etw_level_code` is never used
+   --> crates/service/src/etw.rs:195:4
+    |
+195 | fn etw_level_code(level: EtwLevel) -> u8 {
+    |    ^^^^^^^^^^^^^^
+
+warning: function `encode_etw_message` is never used
+   --> crates/service/src/etw.rs:204:4
+    |
+204 | fn encode_etw_message(provider_name: &str, message: &str) -> Vec<u16> {
+    |    ^^^^^^^^^^^^^^^^^^
+
+warning: fields `id`, `peer_static`, and `created_at` are never read
+   --> crates/relay/src/main.rs:154:5
+    |
+153 | struct RelaySession {
+    |        ------------ fields in this struct
+154 |     id: u64,
+    |     ^^
+155 |     peer_static: [u8; 32],
+    |     ^^^^^^^^^^^
+...
+164 |     created_at: Instant,
+    |     ^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: method `rekey` is never used
+   --> crates/relay/src/main.rs:202:8
+    |
+167 | impl RelaySession {
+    | ----------------- method in this implementation
+...
+202 |     fn rekey(&mut self, now: Instant) -> bool {
+    |        ^^^^^
+
+warning: unused import: `UplinkInfo`
+  --> app/src/main.rs:10:52
+   |
+10 |     FRAME_HEADER_LEN, MAX_PAYLOAD, StatusSnapshot, UplinkInfo,
+   |                                                    ^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: value assigned to `newly_stale` is never read
+  --> app/src/main.rs:71:55
+   |
+71 | ...                   let mut newly_stale = false;
+   |                                             ^^^^^ this value is reassigned later and never used
+...
+75 | ...                       newly_stale = !was_stale && cache.stale_reason().is_some();
+   |                           ---------------------------------------------------------- `newly_stale` is overwritten here before the previous value is read
+   |
+   = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: `balancify-service` (lib) generated 4 warnings
+warning: `balancify-relay` (bin "balancify-relay") generated 2 warnings
+warning: `balancify-app` (bin "balancify-app") generated 2 warnings (run `cargo fix --bin "balancify-app" -p balancify-app` to apply 1 suggestion)
+warning: variable does not need to be mutable
+  --> crates/service/src/bin/soak.rs:61:9
+   |
+61 |     let mut start = Instant::now();
+   |         ----^^^^^
+   |         |
+   |         help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: `balancify-service` (bin "soak") generated 1 warning (run `cargo fix --bin "soak" -p balancify-service` to apply 1 suggestion)
+warning: unused import: `std::collections::BTreeMap`
+  --> crates/service/src/bin/balancify-service.rs:16:5
+   |
+16 | use std::collections::BTreeMap;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `balancify-service` (bin "balancify-service") generated 1 warning (run `cargo fix --bin "balancify-service" -p balancify-service` to apply 1 suggestion)
+    Finished `release` profile [optimized] target(s) in 3.65s

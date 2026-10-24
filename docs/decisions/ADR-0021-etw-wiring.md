@@ -15,10 +15,14 @@ Previously, service had eprintln for failover only, no ETW.
 - `ingest_path`: when ECN CE flag detected (`FLAG_ECN_CE`), after incrementing `ecn_ce` counter, log `ETW EVT_ECN_CE (401)` with path, uplink, cwnd
 - `ingest_path`: when `on_ack_with_rtt` triggers delay event (RTT jump), log `EVT_DELAY_CONGESTION (402)`; same for probe reply `on_rtt` delay
 - `ingest_path`: when `Event::Dropped AuthFailed`, log `EVT_AUTH_FAILED (600)` with uplink
-- `tick`: when `should_rekey` triggers `maybe_rekey`, log `EVT_REKEY (400)` with session and time
+- `tick`: when a configured key-update threshold becomes due, log `EVT_REKEY (400)` with the session and that a coordinated update is required. The service does not rotate ciphers locally (ADR-0043).
 - `tick`: when `check_relay_failover` returns new relay, log `EVT_RELAY_FAILOVER (500)` with old->new and count, plus existing eprintln
 - `crates/service/src/etw.rs`: event IDs 100-600; Windows `EventRegister`/`EventEnabled`/`EventWrite`/`EventUnregister` use a stable provider GUID, nonzero level/keyword, and bounded UTF-16 payloads; non-Windows and Windows API failure paths log to stderr. No provider manifest is installed, so useful Windows trace decoding still needs runtime validation. Relay failover ETW messages deliberately omit endpoint IPs and ports.
 - Tests: existing ETW test `etw_provider_logs` still passes, no new failure
+
+## Status update (2026-10-24)
+
+The former `maybe_rekey` call described below was unilateral and could desynchronize the secure relay. ADR-0043 replaces it with a key-update-due warning; event 400 no longer claims that a live rekey occurred.
 
 ## Consequences
 

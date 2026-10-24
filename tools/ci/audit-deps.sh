@@ -62,7 +62,7 @@ echo "2/6  the lock file resolves nothing that is not allowlisted"
 ALLOW_NAMES=$(sed 's/[[:space:]]*#.*$//' "$ALLOWLIST" | sed 's/[[:space:]]//g' | grep -v '^$')
 if [ -f Cargo.lock ]; then
     unknown=0
-    for name in $(grep '^name = ' Cargo.lock | sed 's/^name = "\(.*\)"$/\1/' | sort -u); do
+    for name in $(grep '^name = ' Cargo.lock | tr -d '\015' | sed 's/^name = "\(.*\)"$/\1/' | sort -u); do
         case "$name" in balancify-*) continue ;; esac   # workspace members
         if printf '%s\n' "$ALLOW_NAMES" | grep -qx "$name"; then continue; fi
         bad "Cargo.lock contains a package that is neither a workspace member nor allowlisted: $name"

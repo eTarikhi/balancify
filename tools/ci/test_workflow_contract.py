@@ -29,6 +29,30 @@ class WorkflowContractTests(unittest.TestCase):
             with self.subTest(action=action):
                 self.assertRegex(text, rf"uses:\s+{re.escape(action)}@{re.escape(version)}\b")
 
+    def test_ci_runs_native_msvc_and_wsl_compatible_entrypoints(self):
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        self.assertIn("msvc-native-checks:", workflow)
+        msvc_job = workflow.split("msvc-native-checks:", 1)[1].split("core-tests-windows:", 1)[0]
+        self.assertIn("runs-on: windows-2022", msvc_job)
+        self.assertIn("Microsoft.VisualStudio.Component.VC.Tools.x86.x64", msvc_job)
+        self.assertIn("VsDevCmd.bat", msvc_job)
+        self.assertIn("local-ci-windows.ps1", msvc_job)
+        self.assertIn("-Quick", msvc_job)
+        self.assertIn("wsl-parity:", workflow)
+        wsl_job = workflow.split("wsl-parity:", 1)[1].split("core-tests-linux:", 1)[0]
+        self.assertIn("runs-on: ubuntu-24.04", wsl_job)
+        self.assertIn("bash tools/ci/local-ci.sh --quick", wsl_job)
+        self.assertIn("not a WSL VM", workflow)
+
+    def test_spdx3_validation_uses_fail_closed_result_wrapper(self):
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        linux_runner = (ROOT / "tools/ci/local-ci.sh").read_text(encoding="utf-8")
+        windows_runner = (ROOT / "tools/ci/local-ci-windows.ps1").read_text(encoding="utf-8")
+        for source in (workflow, linux_runner, windows_runner):
+            with self.subTest(source=source[:40]):
+                self.assertIn("tools/ci/validate_spdx3.py", source)
+                self.assertNotIn("-m spdx3_validate", source)
+
     def test_wdk_build_job_pins_tooling_and_builds_x64_driver(self):
         workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
         self.assertIn("driver-build-x64:", workflow)

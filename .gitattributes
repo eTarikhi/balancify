@@ -1,0 +1,4 @@
+# Keep POSIX entrypoints executable under WSL and Git Bash even when
+# Windows Git is configured with core.autocrlf=true.
+*.sh text eol=lf
+Cargo.lock text eol=lf

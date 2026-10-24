@@ -190,8 +190,10 @@ impl EtwProvider {
     }
 }
 
+#[cfg(any(windows, test))]
 const MAX_MESSAGE_UTF16_UNITS: usize = 8 * 1024;
 
+#[cfg(any(windows, test))]
 fn etw_level_code(level: EtwLevel) -> u8 {
     match level {
         EtwLevel::Error => 2,
@@ -201,6 +203,7 @@ fn etw_level_code(level: EtwLevel) -> u8 {
     }
 }
 
+#[cfg(any(windows, test))]
 fn encode_etw_message(provider_name: &str, message: &str) -> Vec<u16> {
     let message = format!("{provider_name}: {message}");
     let mut payload: Vec<u16> = message

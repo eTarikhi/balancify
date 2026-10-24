@@ -58,9 +58,9 @@ CI progression: 39232571739 failure non-ASCII, 39233028939 failure prefix, 39233
 - Crypto: 36 tests (AEAD 8, handshake 12, keys, store, replay 5, rekey 3)
 - IPC: 9 tests (contract v1, truncation, Counters 10 fields)
 - Relay: 12 tests (Endpoint 6, SecureRelay 6)
-- Service: 30+ tests (bonded, flow-level, duplicate, no healthy, idle session, unanswered probe, capacity sample, sleep/resume, NAT rebind, full window Hold, ack reopen, keepalives+probe, probe reply RTT+capacity, IPC status, rule edits, event rate, self-test, bond revert, MTU, metered, loss failover, secure handshake, pinning, failover, rekey auto, per-flow, per-class, rate limiter, ECN/delay wire, bundle per-path)
+- Service: 30+ tests (bonded, flow-level, duplicate, no healthy, idle session, unanswered probe, capacity sample, sleep/resume, NAT rebind, full window Hold, ack reopen, keepalives+probe, probe reply RTT+capacity, IPC status, rule edits, event rate, self-test, bond revert, MTU, metered, loss failover, secure handshake, pinning, failover, key-update due + secure peer synchronization regression, per-flow, per-class, rate limiter, ECN/delay wire, bundle per-path)
 - Tunnel: 31 tests (DRR proportionality 3000:1000, quantum < packet, idle cannot bank burst, sender numbers, without paths refuses, ack frees retx, retx bounded, ECN flag 0x04, per-session seq)
-- E2E: 9 tests (delay-gap 40ms reorder 0 ooo, reinjection recovers lost, unplugging keeps alive, flow-level not held up, duplicate delivers once, IPC contract v1 over stream, secure handshake over real UDP, etc.)
+- E2E: prior 9 scenarios plus packet-count and elapsed-time key-update threshold cases (real TunnelCipher client and peer Receiver); historical Rust totals above predate ADR-0043.
 - Fuzz: 6 tests (20k rounds each, no panic, no invented payload, caps bound memory, length checks, replay cannot manufacture)
 - App: 0, Installer: 2, plus benches (drr, pacing, ecn, crypto) and throughput.rs (real cipher, 5 profiles)
 

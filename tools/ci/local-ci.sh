@@ -18,8 +18,8 @@ Usage: tools/ci/local-ci.sh [--quick] [--push] [--help]
              and remain covered by the remote x64/ARM64 jobs.
   --quick    Run policy, Python, safety, and portable-C checks only. Does not
              build Rust/SBOM and cannot be combined with --push.
-  --push     Run the full local suite, require a clean committed arena/* branch,
-             push that tested HEAD to origin, then wait for its remote CI run.
+  --push     Run the full local suite, require a clean committed non-default
+             branch, push that tested HEAD to origin, then wait for remote CI.
              Does not create commits or force-push. If remote CI fails, the
              commit remains pushed and the script exits nonzero.
 EOF
@@ -81,8 +81,8 @@ fi
 BRANCH="$(git symbolic-ref --quiet --short HEAD || true)"
 HEAD_BEFORE="$(git rev-parse HEAD)"
 if [[ "$PUSH_AFTER_PASS" == 1 ]]; then
-    if [[ -z "$BRANCH" || "$BRANCH" != arena/* ]]; then
-        echo "--push is restricted to a named arena/* review branch; current branch: ${BRANCH:-DETACHED}." >&2
+    if [[ -z "$BRANCH" ]]; then
+        echo "--push requires a named topic branch; detached HEAD is not allowed." >&2
         exit 2
     fi
     if [[ -n "$(git status --porcelain --untracked-files=all)" ]]; then
@@ -95,6 +95,11 @@ if [[ "$PUSH_AFTER_PASS" == 1 ]]; then
     fi
     if ! gh auth status >/dev/null 2>&1; then
         echo "GitHub CLI is not authenticated. Run 'gh auth login' before --push." >&2
+        exit 2
+    fi
+    DEFAULT_BRANCH="$(gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name')"
+    if [[ -z "$DEFAULT_BRANCH" || "$BRANCH" == "$DEFAULT_BRANCH" ]]; then
+        echo "--push is restricted to a named topic branch, not the default branch '${DEFAULT_BRANCH:-unknown}'." >&2
         exit 2
     fi
     # Refuse a push that would overwrite remote-only work; normal git push is
@@ -152,7 +157,7 @@ if [[ "$PROFILE" == full ]]; then
     run_step generate-spdx-2 sh tools/ci/sbom.sh 0.1.0
     run_step validate-spdx-2 "$VENV/bin/python" -m spdx_tools.spdx.clitools.pyspdxtools --infile sbom.spdx.json
     run_step generate-spdx-3 "$VENV/bin/python" tools/ci/sbom_v3.py 0.1.0
-    run_step validate-spdx-3 "$VENV/bin/python" -m spdx3_validate --json sbom.spdx3.json --spdx-version 3.0.1 --quiet
+    run_step validate-spdx-3 "$VENV/bin/python" tools/ci/validate_spdx3.py sbom.spdx3.json
 else
     printf 'SKIP  Rust, release build, and SPDX validation (quick profile)\n' | tee -a "$LOG_DIR/summary.txt"
 fi

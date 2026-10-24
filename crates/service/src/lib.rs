@@ -164,11 +164,14 @@ pub struct Service<C: Crypto> {
     /// Last observed local (source) endpoint per uplink, for NAT re-binding
     /// detection (Sec.6.6).
     path_local: BTreeMap<UplinkId, SocketAddr>,
-    /// Rekey tracking for forward secrecy (Sec.11.3).
+    /// Key-update diagnostics. The one-way KDF can derive keys locally, but
+    /// live sessions must not rotate until both peers coordinate the update.
     last_rekey: Option<Instant>,
     packets_since_rekey: u64,
+    key_epoch_started: Option<Instant>,
     rekey_interval: Duration,
     rekey_packet_threshold: u64,
+    rekey_due: bool,
     /// Relay failover (Sec.4.5): primary + secondary relay addrs, health tracking + convergence measurement Sec.10.3 failover <=2s
     relay_primary: Option<SocketAddr>,
     relay_secondary: Option<SocketAddr>,
@@ -241,8 +244,10 @@ impl<C: Crypto + Clone> Service<C> {
             path_local: BTreeMap::new(),
             last_rekey: None,
             packets_since_rekey: 0,
-            rekey_interval: Duration::from_secs(3600), // 1 hour default per Sec.11.3
-            rekey_packet_threshold: 1_000_000,          // 1M packets or 1 hour
+            key_epoch_started: None,
+            rekey_interval: Duration::from_secs(3600), // planned 1 hour threshold
+            rekey_packet_threshold: 1_000_000,          // planned 1M packet threshold
+            rekey_due: false,
             relay_primary: None,
             relay_secondary: None,
             relay_current: None,
@@ -591,8 +596,8 @@ impl<C: Crypto + Clone> Service<C> {
             self.pacing.on_send(sent.path, payload.len() as u64, now);
             self.counters.packets_stripped += 1;
             self.packets_since_rekey += 1;
-            if self.last_rekey.is_none() {
-                self.last_rekey = Some(now);
+            if self.key_epoch_started.is_none() {
+                self.key_epoch_started = Some(now);
             }
             self.keepalives.on_traffic(sent.path, now);
             self.policy.note_traffic(UplinkId(sent.path), now);
@@ -644,8 +649,8 @@ impl<C: Crypto + Clone> Service<C> {
         self.counters.packets_forwarded += 1;
         // Flow-level capacity is sampled when the authenticated FlowAck arrives.
         self.packets_since_rekey += 1;
-        if self.last_rekey.is_none() {
-            self.last_rekey = Some(now);
+        if self.key_epoch_started.is_none() {
+            self.key_epoch_started = Some(now);
         }
         self.keepalives.on_traffic(uplink.0, now);
         self.policy.note_traffic(uplink, now);
@@ -802,13 +807,15 @@ impl<C: Crypto + Clone> Service<C> {
         let probe_timeout = self.cfg.probe_timeout;
         self.probes.retain(|_, (sent_at, _)| now.duration_since(*sent_at) < probe_timeout);
 
-        // Sec.11.3 rekey for forward secrecy: time-based (1h) or packet-based (1M)
-        if self.should_rekey(now) {
-            if self.maybe_rekey(now) {
-                self.last_rekey = Some(now);
-                self.packets_since_rekey = 0;
-                self.etw.info(etw::EVT_REKEY, &format!("rekeyed session {} at {:?}", self.cfg.session, now));
-            }
+        // Do not rotate transport ciphers locally: the relay has no key-update
+        // message/acknowledgement, so a unilateral switch would strand the
+        // session. Record when a coordinated handshake is required instead.
+        if !self.rekey_due && self.should_rekey(now) {
+            self.rekey_due = true;
+            self.etw.warn(
+                etw::EVT_REKEY,
+                &format!("session {} reached its key-update threshold; coordinated handshake required", self.cfg.session),
+            );
         }
 
         // Sec.4.5 relay failover: if no ACK from current relay within timeout,
@@ -829,60 +836,17 @@ impl<C: Crypto + Clone> Service<C> {
     }
 
     fn should_rekey(&self, now: Instant) -> bool {
-        if let Some(last) = self.last_rekey {
-            if now.duration_since(last) >= self.rekey_interval {
-                return true;
-            }
-        } else {
-            // First rekey check: if we've sent enough packets, trigger
-            if self.packets_since_rekey == 0 {
-                return false;
-            }
-        }
-        self.packets_since_rekey >= self.rekey_packet_threshold
+        let time_due = self
+            .key_epoch_started
+            .is_some_and(|started| now.duration_since(started) >= self.rekey_interval);
+        time_due || self.packets_since_rekey >= self.rekey_packet_threshold
     }
 
-
-    /// Rekey transport keys for forward secrecy (Sec.11.3). Generic version using Crypto::rekey().
-    /// Returns true if rekeyed (both ciphers support rekey).
-    pub fn maybe_rekey(&mut self, now: Instant) -> bool {
-        let tx_cipher = self.tx.crypto().clone();
-        let rx_cipher = self.rx.crypto().clone();
-        let new_tx = match tx_cipher.rekey() {
-            Some(c) => c,
-            None => return false,
-        };
-        let new_rx = match rx_cipher.rekey() {
-            Some(c) => c,
-            None => return false,
-        };
-        let session = self.cfg.session;
-        let quanta = {
-            let q = self.snapshot.quanta();
-            if q.is_empty() {
-                self.tx.paths().into_iter().map(|p| (p, 1400u64)).collect()
-            } else {
-                q
-            }
-        };
-        let sender_cfg = SenderConfig { rto: self.cfg.rto, ..SenderConfig::default() };
-        let receiver_cfg = ReceiverConfig {
-            hold_cap: self.cfg.hold_cap,
-            idle_timeout: self.cfg.idle_timeout,
-            auto_accept: self.cfg.auto_accept,
-            max_sessions: self.rx.config().max_sessions,
-        };
-        self.tx = Sender::with_config(session, new_tx, quanta, sender_cfg);
-        self.rx = Receiver::new(new_rx, receiver_cfg);
-        if !self.cfg.auto_accept {
-            self.rx.open_session(session, now);
-        }
-        true
-    }
-
+    /// Configure the point at which diagnostics mark the session as needing a
+    /// coordinated key update. Reaching this threshold does not change keys.
     pub fn set_rekey_interval(&mut self, interval: Duration, packet_threshold: u64) {
         self.rekey_interval = interval;
-        self.rekey_packet_threshold = packet_threshold;
+        self.rekey_packet_threshold = packet_threshold.max(1);
     }
 
     pub fn packets_since_rekey(&self) -> u64 {
@@ -890,6 +854,9 @@ impl<C: Crypto + Clone> Service<C> {
     }
     pub fn last_rekey(&self) -> Option<Instant> {
         self.last_rekey
+    }
+    pub fn rekey_due(&self) -> bool {
+        self.rekey_due
     }
 
     pub fn on_relay_ack(&mut self, now: Instant) {
@@ -1323,6 +1290,10 @@ impl Service<balancify_crypto::TunnelCipher> {
             };
             self.tx = Sender::with_config(session, tx_cipher, quanta, sender_cfg);
             self.rx = Receiver::new(rx_cipher, receiver_cfg);
+            self.last_rekey = None;
+            self.packets_since_rekey = 0;
+            self.key_epoch_started = Some(now);
+            self.rekey_due = false;
             if !self.cfg.auto_accept {
                 self.rx.open_session(session, now);
             }
@@ -1400,17 +1371,21 @@ impl Service<balancify_crypto::TunnelCipher> {
             msg
         };
 
-        let initiator = self.handshake_initiator.as_mut().ok_or(balancify_crypto::HandshakeError::BadOrder)?;
+        // A handshake response is single-use, including malformed or
+        // mismatched responses. Do not leave an authenticated-but-rejected
+        // transcript available for another attempt.
+        let mut initiator = self
+            .handshake_initiator
+            .take()
+            .ok_or(balancify_crypto::HandshakeError::BadOrder)?;
         let (payload, keys) = initiator.read_message(raw)?;
 
-        // Payload should echo session id
-        if payload.len() >= 8 {
-            let echoed = u64::from_be_bytes(payload[..8].try_into().unwrap());
-            if echoed != self.cfg.session {
-                // Session mismatch, but still allow? For now, treat as ok if we trust relay
-                // The session id is what we sent, so mismatch is suspicious.
-                // We'll still apply keys but log via counter? For now, continue.
-            }
+        if payload.len() != std::mem::size_of::<u64>() {
+            return Err(balancify_crypto::HandshakeError::Truncated);
+        }
+        let echoed = u64::from_be_bytes(payload[..8].try_into().unwrap());
+        if echoed != self.cfg.session {
+            return Err(balancify_crypto::HandshakeError::AuthFailed);
         }
 
         self.apply_transport_keys(&keys, now);
@@ -1445,6 +1420,8 @@ impl Service<balancify_crypto::TunnelCipher> {
         }
     }
 
+    /// Apply keys produced by a peer-coordinated handshake. Do not call with
+    /// locally derived keys: the remote endpoint must install the same epoch.
     pub fn rekey_with(&mut self, new_keys: &balancify_crypto::TransportKeys, now: Instant) {
         self.apply_transport_keys(new_keys, now);
         self.last_rekey = Some(now);
@@ -2240,7 +2217,7 @@ mod tests {
 
     #[test]
     fn secure_handshake_establishes_transport_keys() {
-        use balancify_crypto::{EphemeralKeypair, Initiator, Responder, StaticKeypair, PinnedKeys};
+        use balancify_crypto::{EphemeralKeypair, PinnedKeys, Responder, StaticKeypair};
         let now = Instant::now();
         let relay_kp = StaticKeypair::generate();
         let client_kp = StaticKeypair::generate();
@@ -2293,6 +2270,76 @@ mod tests {
         svc.publish(now);
         let actions = svc.send_app_packet(&flow, None, b"hello secure", now);
         assert!(actions.iter().any(|a| matches!(a, Action::Send { .. })), "must send after secure session");
+    }
+
+    #[test]
+    fn handshake_rejects_wrong_session_echo_without_installing_keys() {
+        use balancify_crypto::{EphemeralKeypair, Responder, StaticKeypair};
+        let now = Instant::now();
+        let relay_kp = StaticKeypair::generate();
+        let client_kp = StaticKeypair::generate();
+        let dummy_key = [0u8; 32];
+        let dummy_salt = [0u8; 3];
+        let cfg = ServiceConfig { session: 12345, auto_accept: false, ..ServiceConfig::default() };
+        let mut svc = Service::new(
+            cfg,
+            balancify_crypto::TunnelCipher::new(&dummy_key, dummy_salt).unwrap(),
+            balancify_crypto::TunnelCipher::new(&dummy_key, dummy_salt).unwrap(),
+        );
+        svc.set_static_keypair(client_kp);
+
+        let msg1 = svc.initiate_handshake(relay_kp.public_bytes(), b"balancify handshake v1").unwrap();
+        let mut responder = Responder::new(relay_kp.secret_bytes(), b"balancify handshake v1");
+        let request_payload = responder.read_message_checked(&msg1[2..], None, None, None).unwrap();
+        assert_eq!(request_payload, 12345u64.to_be_bytes());
+        let wrong_session = 54321u64.to_be_bytes();
+        let eph = EphemeralKeypair::generate().secret_bytes();
+        let (msg2, _) = responder.write_message(eph, &wrong_session).unwrap();
+        let mut framed = vec![0xFF, 0x02];
+        framed.extend_from_slice(&msg2);
+
+        assert_eq!(
+            svc.handle_handshake_msg2(&framed, now),
+            Err(balancify_crypto::HandshakeError::AuthFailed)
+        );
+        assert_eq!(svc.sessions(), 0, "mismatched session echo must not install keys");
+        assert_eq!(
+            svc.handle_handshake_msg2(&framed, now),
+            Err(balancify_crypto::HandshakeError::BadOrder),
+            "a rejected response consumes the pending initiator"
+        );
+    }
+
+    #[test]
+    fn handshake_rejects_malformed_session_echo_without_installing_keys() {
+        use balancify_crypto::{EphemeralKeypair, Responder, StaticKeypair};
+        let now = Instant::now();
+        let relay_kp = StaticKeypair::generate();
+        let client_kp = StaticKeypair::generate();
+        let dummy_key = [0u8; 32];
+        let dummy_salt = [0u8; 3];
+        let cfg = ServiceConfig { session: 12345, auto_accept: false, ..ServiceConfig::default() };
+        let mut svc = Service::new(
+            cfg,
+            balancify_crypto::TunnelCipher::new(&dummy_key, dummy_salt).unwrap(),
+            balancify_crypto::TunnelCipher::new(&dummy_key, dummy_salt).unwrap(),
+        );
+        svc.set_static_keypair(client_kp);
+
+        let msg1 = svc.initiate_handshake(relay_kp.public_bytes(), b"balancify handshake v1").unwrap();
+        let mut responder = Responder::new(relay_kp.secret_bytes(), b"balancify handshake v1");
+        let request_payload = responder.read_message_checked(&msg1[2..], None, None, None).unwrap();
+        assert_eq!(request_payload, 12345u64.to_be_bytes());
+        let eph = EphemeralKeypair::generate().secret_bytes();
+        let (msg2, _) = responder.write_message(eph, &[0x01]).unwrap();
+        let mut framed = vec![0xFF, 0x02];
+        framed.extend_from_slice(&msg2);
+
+        assert_eq!(
+            svc.handle_handshake_msg2(&framed, now),
+            Err(balancify_crypto::HandshakeError::Truncated)
+        );
+        assert_eq!(svc.sessions(), 0, "malformed session echo must not install keys");
     }
 
     #[test]
@@ -2414,35 +2461,6 @@ mod tests {
         assert!(conv.as_millis() >= 900 && conv.as_millis() <= 1100, "convergence ~1000ms, got {}ms", conv.as_millis());
         assert_eq!(svc.uplink_failover_history().len(), 1);
         assert!(conv.as_secs_f64() <= 2.0, "target <=2s, got {}ms", conv.as_millis());
-    }
-
-    #[test]
-    fn rekey_auto_trigger_by_packet_count() {
-        let now = Instant::now();
-        let dummy_key = [0u8; 32];
-        let dummy_salt = [0u8; 3];
-        let tx_cipher = balancify_crypto::TunnelCipher::new(&dummy_key, dummy_salt).unwrap();
-        let rx_cipher = balancify_crypto::TunnelCipher::new(&dummy_key, dummy_salt).unwrap();
-        let cfg = ServiceConfig { session: 1, seed: 0xBEEF, ..ServiceConfig::default() };
-        let mut svc = Service::new(cfg, tx_cipher, rx_cipher);
-        svc.add_uplink(UplinkId(0), 200_000_000, false, 1500, now);
-        for _ in 0..5 { svc.on_probe_ok(UplinkId(0), Duration::from_millis(10), now); }
-        svc.publish(now);
-        svc.set_rekey_interval(Duration::from_secs(3600), 5); // rekey after 5 packets
-
-        let flow = FlowKey::new(6, sa(5000), peer(443));
-        for i in 0..5 {
-            let _ = svc.send_app_packet(&flow, None, format!("p{}", i).as_bytes(), now);
-        }
-        assert_eq!(svc.packets_since_rekey(), 5);
-        // tick should trigger rekey
-        let _actions = svc.tick(now + Duration::from_secs(1));
-        // After rekey, packets_since should reset to 0
-        assert_eq!(svc.packets_since_rekey(), 0, "rekey should reset counter");
-        assert!(svc.last_rekey().is_some());
-        // Ensure service still can send after rekey
-        let actions2 = svc.send_app_packet(&flow, None, b"after rekey", now + Duration::from_secs(2));
-        assert!(actions2.iter().any(|a| matches!(a, Action::Send { .. })));
     }
 
     #[test]

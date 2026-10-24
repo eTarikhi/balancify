@@ -93,10 +93,10 @@ impl TransportKeys {
     /// A [`TunnelCipher`] for the receiving direction.
     pub fn recv_cipher(&self) -> Option<TunnelCipher> { TunnelCipher::new(&self.recv, self.salt()) }
 
-    /// Rekey both directions, for forward secrecy (Sec.11.3). Returns new
-    /// `TransportKeys` with fresh send/recv keys but same handshake hash (so
-    /// salt stays bound to the original transcript). Old keys should be
-    /// zeroized by the caller.
+    /// Derive next keys for both directions. This is only a KDF operation; it
+    /// does not notify or synchronize a peer. Live sessions must coordinate
+    /// activation of the returned keys. The handshake hash remains unchanged,
+    /// so the nonce salt stays bound to the original transcript.
     pub fn rekey(&self) -> Option<Self> {
         let send = {
             let mut okm = [0u8; KEY_LEN];

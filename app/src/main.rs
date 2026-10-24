@@ -7,7 +7,7 @@
 
 use balancify_ipc::{
     decode_frame, encode_frame, Counters, Event, FrameKind, Request, Response,
-    FRAME_HEADER_LEN, MAX_PAYLOAD, StatusSnapshot, UplinkInfo,
+    FRAME_HEADER_LEN, MAX_PAYLOAD, StatusSnapshot,
 };
 use std::io::{Read, Write};
 use std::net::{TcpStream, SocketAddr};
@@ -68,12 +68,10 @@ fn main() -> std::io::Result<()> {
                         match recv_event(&mut stream) {
                             Ok(Some(ev)) => {
                                 let now = Instant::now();
-                                let mut newly_stale = false;
                                 if let Some(cache) = last_good.as_mut() {
                                     let was_stale = cache.stale_reason().is_some();
                                     cache.apply_event(&ev, now);
-                                    newly_stale = !was_stale && cache.stale_reason().is_some();
-                                    if newly_stale {
+                                    if !was_stale && cache.stale_reason().is_some() {
                                         render_stale_home(cache, now);
                                     }
                                 }
@@ -579,6 +577,7 @@ fn render_event(ev: Event) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use balancify_ipc::UplinkInfo;
     use std::net::TcpListener;
 
     fn tcp_pair() -> (TcpStream, TcpStream) {

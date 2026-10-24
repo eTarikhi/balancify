@@ -14,7 +14,7 @@ This directory contains first-party NDIS miniport and WDF control-device source 
 **Known runtime/product gaps (not closed by the CI build):**
 - `IOCTL_BALANCIFY_SET_MTU` accepts a confirmation of the configured MTU, but rejects a different value with `STATUS_NOT_SUPPORTED`. NDIS handles OID_GEN_MAXIMUM_FRAME_SIZE for NDIS 6+ from initialization/restart attributes; this scaffold has no supported runtime reconfiguration path, so it must not mutate only the driver's local view ([Microsoft documentation](https://learn.microsoft.com/en-us/windows-hardware/drivers/network/oid-gen-maximum-frame-size)).
 - `IOCTL_BALANCIFY_SET_QUANTA` validates basic request sizing and returns `STATUS_NOT_SUPPORTED`; no scheduler consumes the weights yet, so the driver does not report a false success.
-- The TX queue and service-side `DEQUEUE_TX` polling path now exist in source, but the device handle, IOCTL operation, and service-to-relay packet path have not been tested against an installed driver. The queue is bounded and volatile: on pressure NDIS receives `NDIS_STATUS_RESOURCES`, and packets are not persisted across device removal. End-to-end behavior remains unverified.
+- The TX queue and service-side `DEQUEUE_TX` polling path now exist in source, but the device handle, IOCTL operation, and service-to-relay packet path have not been tested against an installed driver. The service retains one dequeued packet when scheduling returns `Hold` or `Refused`, retries it before reading later packets, and leaves the rest in the kernel queue for backpressure. This pending slot and the kernel queue are bounded and volatile; neither survives a service or adapter restart. End-to-end behavior remains unverified.
 
 **Signing & HVCI:**
 - Partner Center enrolment + EV cert ordered in Phase 1 (G1).
@@ -48,6 +48,7 @@ strings x64\Release\balancify.sys | findstr BlaB
 ```
 
 **Test (real VM required):**
+- After test-signing and installing the driver, run `powershell -NoProfile -ExecutionPolicy Bypass -File tools\ci\inspect-driver-device.ps1` from the repository root in an elevated PowerShell. This read-only preflight opens the privileged control device, calls `GET_STATS`, and writes OS/device counters to ignored `target/local-wdk/runtime-checks/`; stop the service first because its control-device handle is exclusive. It does not inject or dequeue packets and is not a packet-path acceptance test.
 - Hyper-V VM Gen2 Secure Boot on vTPM VBS on, Memory Integrity on/off
 - Enable test-signing: `bcdedit /set testsigning on`, reboot
 - Install: `pnputil /add-driver driver\balancify.inf /install`

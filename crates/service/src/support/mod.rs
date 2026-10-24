@@ -56,6 +56,9 @@ pub struct UplinkDiag {
 pub struct RekeyDiag {
     pub packets_since_rekey: u64,
     pub last_rekey_ago_secs: Option<u64>,
+    /// True once an update threshold is reached; keys remain unchanged until a
+    /// peer-coordinated handshake is implemented.
+    pub update_required: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -102,7 +105,15 @@ impl SupportBundle {
         let rekey = RekeyDiag {
             packets_since_rekey: svc.packets_since_rekey(),
             last_rekey_ago_secs: svc.last_rekey().map(|t| now.duration_since(t).as_secs()),
+            update_required: svc.rekey_due(),
         };
+        let mut warnings = Vec::new();
+        if rekey.update_required {
+            warnings.push(
+                "A transport key-update threshold is due; keys were not rotated because the relay protocol has no coordinated update exchange."
+                    .to_owned(),
+            );
+        }
 
         let paths = svc.cc.paths();
         let per_path = paths.iter().map(|p| {
@@ -142,7 +153,7 @@ impl SupportBundle {
             uplink_failover_convergence_ms: svc.uplink_failover_convergence().map(|d| d.as_millis() as u64),
             rekey,
             congestion,
-            warnings: Vec::new(),
+            warnings,
         }
     }
 
@@ -208,9 +219,10 @@ impl SupportBundle {
 
         write!(
             json,
-            "],\"rekey\":{{\"packets_since_rekey\":{},\"last_rekey_ago_secs\":{}}},\"congestion\":{{\"loss_events\":{},\"ecn_events\":{},\"delay_events\":{},\"paths\":[",
+            "],\"rekey\":{{\"packets_since_rekey\":{},\"last_rekey_ago_secs\":{},\"update_required\":{}}},\"congestion\":{{\"loss_events\":{},\"ecn_events\":{},\"delay_events\":{},\"paths\":[",
             self.rekey.packets_since_rekey,
             json_optional_u64(self.rekey.last_rekey_ago_secs),
+            self.rekey.update_required,
             self.congestion.loss_events,
             self.congestion.ecn_events,
             self.congestion.delay_events,
@@ -285,7 +297,7 @@ fn json_optional_u64(value: Option<u64>) -> String {
 mod tests {
     use super::*;
     use crate::{Service, ServiceConfig};
-    use balancify_core::UplinkId;
+    use balancify_core::{FlowKey, UplinkId};
     use balancify_tunnel::PassThrough;
     use std::time::{Duration, Instant};
 
@@ -307,6 +319,37 @@ mod tests {
         assert!(json.contains("\"relay_configured\":true"));
         assert!(!json.contains("198.51.100.42"));
         assert!(!json.contains("9443"));
+    }
+
+    #[test]
+    fn bundle_reports_due_key_update_without_claiming_rotation() {
+        let now = Instant::now();
+        let mut svc = Service::new(ServiceConfig::default(), PassThrough, PassThrough);
+        svc.add_uplink(UplinkId(0), 100_000_000, false, 1500, now);
+        for _ in 0..5 {
+            svc.on_probe_ok(UplinkId(0), Duration::from_millis(10), now);
+        }
+        assert!(svc.publish(now));
+        svc.set_rekey_interval(Duration::from_secs(3600), 1);
+        let flow = FlowKey::new(
+            6,
+            "10.0.0.1:5000".parse().unwrap(),
+            "203.0.113.10:443".parse().unwrap(),
+        );
+        let actions = svc.send_app_packet(&flow, None, b"threshold", now);
+        assert!(actions.iter().any(|action| matches!(action, crate::Action::Send { .. })));
+        assert_eq!(svc.packets_since_rekey(), 1);
+        let _ = svc.tick(now + Duration::from_secs(1));
+
+        let bundle = SupportBundle::collect(&svc, now + Duration::from_secs(1));
+        assert!(bundle.rekey.update_required);
+        assert!(bundle.rekey.last_rekey_ago_secs.is_none());
+        assert!(bundle
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("keys were not rotated")));
+        let json = bundle.to_json();
+        assert!(json.contains("\"update_required\":true"));
     }
 
     #[test]

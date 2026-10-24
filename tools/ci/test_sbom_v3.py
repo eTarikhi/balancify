@@ -78,6 +78,9 @@ class SbomV3GenerationTests(unittest.TestCase):
         driver = next(p for p in packages if p["name"] == "balancify-driver-source")
         self.assertEqual(driver["software_primaryPurpose"], "source")
         self.assertIn("no WDK binary", driver["software_sourceInfo"])
+        sbom = next(e for e in elements if e.get("type") == "software_Sbom")
+        self.assertEqual(sbom["software_sbomType"], ["source"])
+        self.assertIsInstance(sbom["software_sbomType"], list)
 
     def test_preserves_hashes_purls_and_dependency_relationships(self):
         graph = build_document(

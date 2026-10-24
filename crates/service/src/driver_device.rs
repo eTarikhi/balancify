@@ -16,7 +16,15 @@ const IOCTL_FUNCTION_DEQUEUE_TX: u32 = 0x804;
 const FILE_READ_ACCESS: u32 = 0x1;
 const TX_PACKET_HEADER_LEN: usize = 16;
 const TX_PACKET_VERSION: u32 = 1;
+#[cfg(windows)]
 const TX_PACKET_OUTPUT_LEN: usize = TX_PACKET_HEADER_LEN + MAX_INNER_PACKET_LEN;
+
+/// A dequeued miniport packet must remain in user mode while the service says
+/// it is held or has no eligible route. In those cases the driver queue has
+/// already popped it, so retrying is required to avoid silently dropping it.
+pub fn should_retry_driver_tx(actions: &[super::Action]) -> bool {
+    !actions.iter().any(|action| matches!(action, super::Action::Send { .. }))
+}
 
 const fn ctl_code(device_type: u32, function: u32, method: u32, access: u32) -> u32 {
     (device_type << 16) | (access << 14) | (function << 2) | method
@@ -261,6 +269,31 @@ pub use platform::DriverDevice;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn driver_tx_retries_when_the_service_did_not_schedule_a_send() {
+        use balancify_core::{FlowClass, FlowKey, UplinkId};
+        use std::net::SocketAddr;
+
+        let flow = FlowKey::new(
+            17,
+            "192.0.2.1:1000".parse::<SocketAddr>().unwrap(),
+            "192.0.2.2:2000".parse::<SocketAddr>().unwrap(),
+        );
+        assert!(should_retry_driver_tx(&[]));
+        assert!(should_retry_driver_tx(&[super::super::Action::Hold {
+            flow: flow.clone(),
+            data: vec![1, 2, 3],
+        }]));
+        assert!(should_retry_driver_tx(&[super::super::Action::Refused {
+            flow: flow.clone(),
+            class: FlowClass::Bulk,
+        }]));
+        assert!(!should_retry_driver_tx(&[super::super::Action::Send {
+            uplink: UplinkId(0),
+            bytes: vec![1, 2, 3],
+        }]));
+    }
 
     #[test]
     fn inject_ioctl_matches_the_wdf_control_code_contract() {

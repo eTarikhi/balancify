@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, "arena/*"]
+    branches: ["**"]
   pull_request:
   # Explicit operator-triggered CI for a pushed branch; local CI remains
   # available through tools/ci/local-ci.sh before making any remote changes.
@@ -36,6 +36,25 @@ jobs:
         run: sh -n tools/lab/netem-rig.sh && sh tools/lab/test_netem_rig.sh
       - name: test raw IP packet validator
         run: sh tools/ci/test-driver-packets.sh
+
+  # GitHub-hosted Ubuntu is not a WSL VM. This runs the exact Ubuntu 24.04
+  # shell entrypoint and userland used by developers running it inside WSL2.
+  wsl-parity:
+    name: WSL Ubuntu 24.04 parity
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Run the WSL-compatible quick validation profile
+        run: bash tools/ci/local-ci.sh --quick
+      - name: Upload WSL/Linux validation logs
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: balancify-wsl-linux-ci-logs
+          path: target/local-ci/logs/**/*.log
+          if-no-files-found: ignore
+          retention-days: 7
 
   core-tests-linux:
     name: Rust workspace tests (ubuntu)
@@ -105,7 +124,7 @@ jobs:
           set -eu
           python3 -m pip install --disable-pip-version-check --no-input spdx3-validate==0.0.7
           python3 tools/ci/sbom_v3.py 0.1.0
-          python3 -m spdx3_validate --json sbom.spdx3.json --spdx-version 3.0.1 --quiet
+          python3 tools/ci/validate_spdx3.py sbom.spdx3.json
       - name: publish validated SBOM sidecars
         uses: actions/upload-artifact@v7.0.2
         with:
@@ -115,6 +134,44 @@ jobs:
             sbom.spdx3.json
           if-no-files-found: error
           retention-days: 90
+
+  msvc-native-checks:
+    name: Native MSVC checks (Windows x64)
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v6.0.0
+        with:
+          python-version: '3.12'
+          architecture: x64
+      - name: Run native Windows quick validation with the MSVC developer environment
+        shell: pwsh
+        run: |
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          if (-not (Test-Path -LiteralPath $vswhere)) { throw "vswhere.exe was not found: $vswhere" }
+          $vsInstall = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if ($LASTEXITCODE -ne 0 -or -not $vsInstall) { throw 'Visual Studio 2022 MSVC x64 tools were not found on this runner.' }
+          $devCmd = Join-Path $vsInstall 'Common7\Tools\VsDevCmd.bat'
+          if (-not (Test-Path -LiteralPath $devCmd)) { throw "VsDevCmd.bat was not found: $devCmd" }
+          $batch = Join-Path $env:RUNNER_TEMP 'run-native-msvc-ci.cmd'
+          @"
+          @echo off
+          call "$devCmd" -no_logo -arch=x64 -host_arch=x64
+          if errorlevel 1 exit /b %errorlevel%
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$env:GITHUB_WORKSPACE\tools\ci\local-ci-windows.ps1" -Quick
+          exit /b %errorlevel%
+          "@ | Set-Content -LiteralPath $batch -Encoding ascii
+          & $env:ComSpec /d /c "`"$batch`""
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload native Windows validation logs
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: balancify-msvc-windows-ci-logs
+          path: target/local-ci-windows/logs/**/*.txt
+          if-no-files-found: ignore
+          retention-days: 7
 
   core-tests-windows:
     name: Rust workspace tests (windows)

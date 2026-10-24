@@ -1,0 +1,8 @@
+BalanciFy local CI · profile=full · branch=arena/3f48d354-balancify · HEAD=8f68288797785afa39bfb0bec5eb1685bdc47d30
+PASS  dependency-policy
+PASS  lab-python-tests
+PASS  ci-python-tests
+PASS  netem-syntax-and-safety
+PASS  portable-driver-tests
+FAIL  rust-workspace-tests (exit 101)
+Log: /mnt/c/Users/Administrator/Desktop/Git-Clones/BalanciFy/target/local-ci/logs/20261024T135337Z/rust-workspace-tests.log

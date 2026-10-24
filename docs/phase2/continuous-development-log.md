@@ -1,5 +1,26 @@
 # Continuous development log — without stopping to report
 
+## Rekey coordination and driver runtime preflight (2026-10-24)
+
+- Inspected secure session call paths: the service's count/time trigger replaced only its local ciphers; the relay-side `RelaySession::rekey` had no callers. Deterministic local key derivation is not a wire protocol, and independent count/time triggers can diverge under loss or timer skew.
+- Added ADR-0043. Disabled unilateral live cipher rotation; configured thresholds now set `update_required`, generate ETW/support-bundle warnings, and leave the current epoch intact. Removed the unused relay-local rotation method and clarified that KDF helpers do not coordinate peers.
+- Added `crates/service/tests/rekey_safety.rs`, using actual `TunnelCipher` and peer `Receiver` types to verify the peer continues authenticating traffic after a threshold, while status reports that no update occurred. Coordinated update/ack, epoch transitions, recovery, and security-limit acceptance remain pending.
+- Added `tools/ci/inspect-driver-device.ps1`: elevated, read-only `GET_STATS` against `\\.\BalanciFy`; emits OS/device evidence to ignored `target/local-wdk/runtime-checks/`. It uses an exact `CreateFileW` P/Invoke entry point and never injects or dequeues. This script has not been run against installed Windows hardware; packet-path, signing, Verifier, and HVCI acceptance remain pending.
+- User full-profile evidence at `8f68288` showed the secure-peer integration passed, but `bundle_reports_due_key_update_without_claiming_rotation` failed because its setup did not ensure a usable published path or successful send. The test was corrected to use five successful probes and assert publish, send, and packet count before checking due status; commit `07dabc7` contains that fix.
+- Added a separate real-cipher peer regression for the elapsed-time threshold, complementing the packet-count case; both verify continued peer decryption after a due signal without unilateral rotation.
+- Handshake review found `handle_handshake_msg2` authenticated Noise but ignored a missing or mismatched echoed session id before installing the negotiated keys. It now consumes each initiator state once, requires an exact 8-byte session echo, and rejects malformed/mismatched echoes without applying keys; two regressions cover both cases.
+- Latest local quick profile (`20261024T140439Z`, working tree based on `3a96e26`) passed: dependency policy, lab Python 5/5, CI Python 49/49, netem safety, and portable driver tests 12/12 (strict C + ASan/UBSan). Quick mode skips Rust, release, and SPDX; the Rust regression changes are included for the next full-profile run.
+- Commits pushed to `arena/3f48d354-balancify`: `1f69589` (read-only driver-device preflight), `b237ab5` (coordinated key-update safety), and `d149f5f` (exact Win32 entrypoint contract + repository-root usage).
+
+## Evidence-driven continuation (2026-10-24)
+
+- The provided local full-profile logs show 306 Rust tests passing and a successful release build on `69b5804eda4fc9c6387732e3a2383dafb37ffac4`. The first run stopped at validator dependency installation due transient PyPI/network resolution; the later run completed all steps according to its summary.
+- A manual review of that later run found `validate-spdx-3.log` contained a JSON Schema error despite the validator process returning success: `software_sbomType` was a string, but SPDX 3.0.1 requires an array. Corrected the generated field to `["source"]` and added a regression assertion.
+- Added `tools/ci/validate_spdx3.py`, which uses the validator's documented library API and fails the CI step whenever its `ValidationResult` contains findings. Wired it into Linux, Windows, and GitHub validation so a nonzero CLI bug cannot hide schema errors.
+- The user reran the full profile on `e8dbc7ed919374feff94b26c078f39a6b8e8f22c`: 306 Rust tests, release build, SPDX 2.3, and fail-closed SPDX 3.0.1 validation all passed. This is local WSL evidence; it does not close WDK/hardware acceptance.
+- The full Rust log also exposed unused-import/assignment and target-specific dead-code warnings; safe warning cleanup is now in progress. The sandbox still has no Cargo toolchain, so the cleanup requires the user's next full run to confirm.
+- Validation in this sandbox: `bash tools/ci/local-ci.sh --quick` passes at branch head `b0b9a14`; Python CI suite 48/48, lab suite 5/5, portable driver suite 12/12 with strict C plus ASan/UBSan; dependency policy and shell syntax pass. Full Rust/SPDX validation was not rerun here because Cargo is unavailable. WDK installation/runtime, Driver Verifier/HVCI, and Rig B acceptance remain pending.
+
 Date: 2026-10-22
 Status: continuous; active branch `arena/81ef53da-balancify`, PR #18 merged as `a1ec9b0`, PR #19 open at `b91b9ee`; push run `39811703258` and PR run `39811711106` passed all six jobs, including unsigned x64/ARM64 WDK compile/link, PE architecture and DYNAMIC_BASE/FORCE_INTEGRITY/NX_COMPAT checks, and INF source-contract tests. An InfVerif CI trial failed without retrievable diagnostics and was removed; no InfVerif/package validation is claimed. Signed installation and hardware acceptance remain pending.
 
@@ -118,3 +139,38 @@ This log records what was done while continuing without stopping, after ADR-0015
 - `5e2922a` makes the portable packet, MTU, RX pause, and TX queue C fixtures run under strict warnings and AddressSanitizer/UndefinedBehaviorSanitizer in Ubuntu CI; push run `39917633486` and PR run `39917639870` passed all six jobs.
 
 - `02409cf` adds a reproducible 12,000-iteration malformed/near-valid IPv4/IPv6 length mutation stress loop to the WDK-independent packet validator fixtures, executed in the strict and ASan/UBSan passes. Push CI `39922008067` and PR CI `39922014929` passed all six jobs. This bounded test is not kernel fuzzing.
+
+- Relay handshake consistency hardening: `SecureRelay::handle_msg1` now requires the authenticated session payload to be exactly 8 bytes, matching the service's response validation. A regression exercises both short and trailing-byte payloads and asserts neither creates a session. Hardware acceptance is not implicated.
+
+- Relay session-id collision hardening: a valid new Noise handshake using an already active session id is rejected instead of overwriting the established relay session and its tunnel keys. The regression verifies the original session remains unchanged and counters reflect rejection.
+
+- Relay source-churn hardening: per-IP handshake-rate state is capped at 4096 entries; when full, a new source replaces the oldest window entry. A focused regression fills the table, adds a new IP, and verifies the bound and deterministic oldest-entry eviction.
+
+- Relay pin-store fail-closed hardening: secure startup now propagates pinned-client storage errors rather than replacing corrupt/unreadable state with an empty (allow-all) pin set. A regression confirms a missing file retains the documented empty-set behavior while malformed stored data is rejected.
+
+- Relay forwarding isolation: when a session-specific upstream socket is unavailable, the relay no longer falls back to another session sharing the same peer address. This prevents one session's plaintext from being sent through another session's egress mapping and ensures upstream replies cannot be attributed to the wrong tunnel keys; exact-session socket lookup is covered by a regression.
+
+- Relay forwarding configuration: an absent `BALANCIFY_FORWARD_ADDR` still selects documented lab echo mode, but a present malformed or non-Unicode setting now fails startup rather than silently disabling upstream forwarding. Added parser regressions for absent, valid, and invalid values.
+
+- Relay listen-port parsing: secure and lab modes now share strict comma-list parsing, rejecting malformed, empty, or duplicate ports instead of dropping invalid entries or starting with no listeners. Added coverage for defaults, valid lists, partial failures, empty fields, duplicate ports, and extra positional arguments.
+
+- Relay state-directory resolution: secure-mode preflight and key-store initialization now share one `PathBuf` resolver. This fixes the Windows default-path mismatch (preflight previously checked `/tmp/balancify` while secure startup used `%ProgramData%\\Balancify`) and rejects an explicitly empty override; added a focused path-resolution regression.
+
+- Relay maintenance scheduling: replaced `now.elapsed() % 10` (which measured age from a freshly captured instant, causing per-datagram sweeps/logging) with a monotonic 10-second deadline. Maintenance now runs after both packet handling and socket timeouts, allowing idle sessions and their forwarding sockets to be reclaimed without requiring fresh traffic; added deterministic scheduler regression.
+
+- Secure relay NAT rebinding: peer routing now follows a session only after a fresh authenticated, non-replayed tunnel frame; invalid/spoofed datagrams cannot redirect deferred ACKs or upstream replies. Added an end-to-end relay regression that verifies spoof rejection and valid rebinding.
+
+- Relay handshake response handling: the relay now installs peer/forwarding mappings only after the full Noise response datagram is sent. A socket send error or short send removes the just-created session so a client that never received msg2 cannot leave a slot allocated; added idempotent session-removal coverage.
+
+- Forwarding-socket admission: per-session upstream sockets (including their required read timeout) are now prepared before sending handshake msg2. If socket setup fails, the session is removed and no success response or peer mapping is emitted.
+
+- Relay error-log abuse control: malformed/unknown handshake traffic now shares a one-line-per-second failure-log throttle, keeping unauthenticated packet floods from turning stderr into an unbounded per-datagram workload. Added a monotonic throttle regression.
+
+- Relay rejection telemetry: malformed Noise messages, noncanonical session payloads, replayed flights, missing peer identity, and responder-key construction errors now increment `total_rejected` consistently. Regressions assert malformed, replay, and pinning failures are reflected in the counter.
+
+- Relay data-plane rejection telemetry: malformed tunnel headers, unknown sessions, per-session rate-limit drops, unauthenticated frames, and replayed frames now contribute to the global reject counter in addition to handshake rejects. The NAT-rebinding regression asserts a spoofed frame is counted.
+
+- Relay upstream-source authentication: each per-session UDP forwarding socket is connected to the configured upstream address and uses connected send/receive operations. This lets the OS reject forged datagrams from unrelated sources before they can be re-encrypted as client traffic; a loopback regression verifies rogue-source filtering and expected-source delivery.
+
+- Relay upstream destination validation: `BALANCIFY_FORWARD_ADDR` now rejects port zero and unspecified IPs during startup parsing, before any client handshake can allocate a session or produce a later socket-connect failure; added invalid-address regressions.
+- Relay handshake admission now includes a smooth aggregate token bucket (200-attempt burst, 100 attempts/second refill) in addition to the per-IP limit. This bounds unauthenticated handshake crypto work even when attackers churn or spoof source IPs; a deterministic burst/refill regression was added.

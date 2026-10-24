@@ -2,18 +2,17 @@
 //! Blueprint Sec.4.2, Sec.11.1 Phase 4 MVP.
 //!
 //! This binary demonstrates the sans-I/O service core wired to real UDP sockets
-//! (one per uplink), with secure handshake, pacing, congestion control, rekey,
+//! (one per uplink), with secure handshake, pacing, congestion control, key-update diagnostics,
 //! and dual-relay failover. It also serves IPC v1 request/response and
 //! subscribed event frames on a loopback-only TCP adapter for the lab; production uses an ACL-protected
 //! Windows named pipe. In production, packets come from the NDIS miniport.
 
 use balancify_core::UplinkId;
 use balancify_crypto::{FileKeyStore, KeyStore, PinnedKeys, TunnelCipher};
-use balancify_service::driver_device::DriverDevice;
+use balancify_service::driver_device::{should_retry_driver_tx, DriverDevice};
 use balancify_service::ipc::server::IpcServer;
 use balancify_service::ipc::{Event as IpcEvent, Request, Response, Status};
 use balancify_service::{Service, ServiceConfig, Action};
-use std::collections::BTreeMap;
 use std::net::{UdpSocket, SocketAddr};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -175,6 +174,23 @@ fn send_datagram(sock: &UdpSocket, bytes: &[u8], destination: SocketAddr) -> std
     let sent = sock.send_to(bytes, destination)?;
     if sent != bytes.len() {
         return Err(std::io::Error::new(std::io::ErrorKind::WriteZero, "short UDP datagram send"));
+    }
+    Ok(())
+}
+
+fn send_scheduled_actions(
+    actions: Vec<Action>,
+    service: &Service<TunnelCipher>,
+    sock0: &UdpSocket,
+    sock1: &UdpSocket,
+    relay_primary: SocketAddr,
+) -> std::io::Result<()> {
+    for action in actions {
+        if let Action::Send { uplink, bytes } = action {
+            let socket = if uplink.0 == 0 { sock0 } else { sock1 };
+            let relay = service.relay_current().unwrap_or(relay_primary);
+            send_datagram(socket, &bytes, relay)?;
+        }
     }
     Ok(())
 }
@@ -362,6 +378,10 @@ fn main() -> std::io::Result<()> {
     let mut last_tick = Instant::now();
     let mut last_stats = Instant::now();
     let mut last_driver_poll = Instant::now();
+    // DEQUEUE_TX removes a packet from the kernel queue. Retain it here when
+    // the service reports Hold/Refused so temporary congestion or link loss
+    // cannot turn a successful miniport send completion into a silent drop.
+    let mut pending_driver_tx: Option<Vec<u8>> = None;
 
     loop {
         let now = Instant::now();
@@ -457,26 +477,38 @@ fn main() -> std::io::Result<()> {
         // insecure lab session). This keeps packets queued before handshake and
         // prevents use of the placeholder cipher. Each record is validated by
         // DriverDevice and revalidated by Service before tunnel scheduling.
+        // Keep the first packet whose service action is Hold/Refused and retry
+        // it before dequeuing more, preserving FIFO and bounding extra memory to
+        // one packet while the kernel queue supplies backpressure.
         if let Some(device) = &driver_device {
             if svc.sessions() > 0
                 && now.duration_since(last_driver_poll) >= Duration::from_millis(10)
             {
                 last_driver_poll = now;
-                for _ in 0..64 {
-                    let Some(packet) = device.dequeue_tx()? else { break };
+                let mut budget = 64;
+                if let Some(packet) = pending_driver_tx.take() {
+                    budget -= 1;
                     let actions = svc.send_ip_packet(&packet, now).map_err(|error| {
                         std::io::Error::new(std::io::ErrorKind::InvalidData, error)
                     })?;
-                    for act in actions {
-                        match act {
-                            Action::Send { uplink, bytes } => {
-                                let sock = if uplink.0 == 0 { &sock0 } else { &sock1 };
-                                let relay = svc.relay_current().unwrap_or(relay_primary);
-                                send_datagram(sock, &bytes, relay)?;
-                            }
-                            Action::Refused { .. } => {}
-                            _ => {}
+                    if should_retry_driver_tx(&actions) {
+                        pending_driver_tx = Some(packet);
+                    } else {
+                        send_scheduled_actions(actions, &svc, &sock0, &sock1, relay_primary)?;
+                    }
+                }
+
+                if pending_driver_tx.is_none() {
+                    for _ in 0..budget {
+                        let Some(packet) = device.dequeue_tx()? else { break };
+                        let actions = svc.send_ip_packet(&packet, now).map_err(|error| {
+                            std::io::Error::new(std::io::ErrorKind::InvalidData, error)
+                        })?;
+                        if should_retry_driver_tx(&actions) {
+                            pending_driver_tx = Some(packet);
+                            break;
                         }
+                        send_scheduled_actions(actions, &svc, &sock0, &sock1, relay_primary)?;
                     }
                 }
             }

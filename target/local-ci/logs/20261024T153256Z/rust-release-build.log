@@ -1,0 +1,26 @@
+   Compiling balancify-relay v0.1.0 (/mnt/c/Users/Administrator/Desktop/Git-Clones/BalanciFy/crates/relay)
+warning: unused import: `PinnedKeys`
+   --> crates/relay/src/main.rs:525:52
+    |
+525 |     use balancify_crypto::{FileKeyStore, KeyStore, PinnedKeys};
+    |                                                    ^^^^^^^^^^
+    |
+    = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: fields `id`, `peer_static`, and `created_at` are never read
+   --> crates/relay/src/main.rs:185:5
+    |
+184 | struct RelaySession {
+    |        ------------ fields in this struct
+185 |     id: u64,
+    |     ^^
+186 |     peer_static: [u8; 32],
+    |     ^^^^^^^^^^^
+...
+195 |     created_at: Instant,
+    |     ^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `balancify-relay` (bin "balancify-relay") generated 2 warnings (run `cargo fix --bin "balancify-relay" -p balancify-relay` to apply 1 suggestion)
+    Finished `release` profile [optimized] target(s) in 8.17s

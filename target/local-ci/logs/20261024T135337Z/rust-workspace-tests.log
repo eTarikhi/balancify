@@ -1,0 +1,473 @@
+   Compiling balancify-tunnel v0.1.0 (/mnt/c/Users/Administrator/Desktop/Git-Clones/BalanciFy/crates/tunnel)
+   Compiling balancify-app v0.1.0 (/mnt/c/Users/Administrator/Desktop/Git-Clones/BalanciFy/app)
+   Compiling balancify-core v0.1.0 (/mnt/c/Users/Administrator/Desktop/Git-Clones/BalanciFy/crates/core)
+   Compiling balancify-crypto v0.1.0 (/mnt/c/Users/Administrator/Desktop/Git-Clones/BalanciFy/crates/crypto)
+   Compiling balancify-service v0.1.0 (/mnt/c/Users/Administrator/Desktop/Git-Clones/BalanciFy/crates/service)
+   Compiling balancify-relay v0.1.0 (/mnt/c/Users/Administrator/Desktop/Git-Clones/BalanciFy/crates/relay)
+warning: fields `id`, `peer_static`, and `created_at` are never read
+   --> crates/relay/src/main.rs:154:5
+    |
+153 | struct RelaySession {
+    |        ------------ fields in this struct
+154 |     id: u64,
+    |     ^^
+155 |     peer_static: [u8; 32],
+    |     ^^^^^^^^^^^
+...
+164 |     created_at: Instant,
+    |     ^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+   Compiling balancify-client v0.1.0 (/mnt/c/Users/Administrator/Desktop/Git-Clones/BalanciFy/crates/client)
+warning: `balancify-relay` (bin "balancify-relay" test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 46.37s
+     Running unittests src/main.rs (target/debug/deps/balancify_app-4a8f4036f7914f94)
+
+running 8 tests
+test tests::event_stream_timeout_stays_stale_until_a_full_status_refresh ... ok
+test tests::ipc_client_address_is_strictly_loopback_only ... ok
+test tests::policy_change_marks_snapshot_stale_until_a_full_status_refresh ... ok
+test tests::stats_event_refreshes_last_known_good_counters_and_timestamp ... ok
+test tests::subscription_failure_renders_and_marks_the_cached_home_stale ... ok
+test tests::uplink_event_updates_cached_state_without_replacing_other_metrics ... ok
+test tests::event_payload_timeout_propagates_after_frame_starts ... ok
+test tests::event_idle_timeout_is_only_ignored_before_frame_bytes_arrive ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running unittests src/main.rs (target/debug/deps/balancify_client-24e3d02911ad1f36)
+
+running 13 tests
+test tests::configured_relay_key_must_match_existing_pins ... ok
+test tests::data_plane_datagrams_must_come_from_the_configured_relay_endpoint ... ok
+test tests::insecure_lab_is_loopback_only ... ok
+test tests::handshake_response_framing_is_recognized_for_single_use_enforcement ... ok
+test tests::relay_key_parser_rejects_malformed_or_zero_identity ... ok
+test tests::insecure_lab_requires_explicit_debug_opt_in ... ok
+test tests::secure_identity_selects_secure_mode_even_when_lab_flag_was_set ... ok
+test tests::state_dir_override_has_highest_precedence ... ok
+test tests::missing_identity_fails_closed_by_default ... ok
+test tests::unix_state_prefers_absolute_xdg_then_home_state_dir ... ok
+test tests::windows_state_falls_back_to_user_profile_not_program_data ... ok
+test tests::windows_state_prefers_per_user_local_app_data ... ok
+test tests::state_dir_rejects_empty_override_and_missing_home ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src/lib.rs (target/debug/deps/balancify_core-9588cf4a972bf08b)
+
+running 83 tests
+test bond::tests::bonding_is_on_by_default ... ok
+test bond::tests::matched_links_keep_bonding ... ok
+test bond::tests::mismatched_pair_reverts_after_enough_samples ... ok
+test bond::tests::pinned_flows_are_not_bond_classes ... ok
+test bond::tests::missing_baseline_does_not_decide ... ok
+test bond::tests::link_mix_change_rearms_the_class ... ok
+test bond::tests::user_override_wins ... ok
+test bond::tests::classes_are_tracked_independently ... ok
+test congestion::tests::a_loss_halves_the_window_and_a_burst_halves_it_once ... ok
+test congestion::tests::a_full_window_blocks_the_path_and_acks_reopen_it ... ok
+test congestion::tests::a_loss_on_one_path_does_not_touch_the_others ... ok
+test congestion::tests::ack_with_rtt_tracks_min_and_detects_delay ... ok
+test congestion::tests::an_unseen_path_starts_at_the_initial_window ... ok
+test congestion::tests::delay_based_reduction_on_rtt_increase ... ok
+test congestion::tests::ecn_reduces_window_milder_than_loss ... ok
+test congestion::tests::in_flight_cannot_go_negative_on_a_late_ack ... ok
+test congestion::tests::reset_returns_windows_to_the_initial_state_but_keeps_the_paths ... ok
+test congestion::tests::forgetting_a_path_drops_its_window ... ok
+test congestion::tests::the_coupled_increase_is_no_faster_than_a_single_path ... ok
+test congestion::tests::slow_start_grows_the_window_per_round_trip ... ok
+test congestion::tests::the_window_never_falls_below_the_floor ... ok
+test flowtable::tests::idle_out_drops_the_entry ... ok
+test flowtable::tests::affinity_holds_while_the_uplink_is_healthy ... ok
+test flowtable::tests::forget_uplink_clears_stale_affinity ... ok
+test flowtable::tests::flows_rehash_only_when_their_uplink_leaves_the_healthy_set ... ok
+test flowtable::tests::latency_sensitive_follows_the_fastest_link ... ok
+test flowtable::tests::pinned_rule_change_moves_the_flow ... ok
+test flowtable::tests::no_capacity_refuses_placement ... ok
+test health::tests::adapter_removed_drops_immediately ... ok
+test health::tests::health_hysteresis_fast_drop_slow_return ... ok
+test health::tests::resume_from_sleep_reprobes_before_carrying_traffic ... ok
+test health::tests::health_quality_degrades_up_link ... ok
+test integration::striping_quanta_come_from_the_same_snapshot_as_placement ... ok
+test integration::classified_flow_travels_rule_to_table_to_snapshot ... ok
+test keepalive::tests::expire_all_makes_paths_due_immediately ... ok
+test keepalive::tests::forgetting_a_path_stops_its_keepalives ... ok
+test keepalive::tests::keepalive_interval_is_capped_at_25s ... ok
+test keepalive::tests::keepalive_fires_once_per_interval_per_path ... ok
+test integration::mtu_follows_path_loss_while_flows_keep_moving ... ok
+test keepalive::tests::nat_rebinding_is_a_path_change_not_a_session_change ... ok
+test mtu::tests::adapter_mtu_follows_the_narrowest_path ... ok
+test keepalive::tests::traffic_suppresses_the_keepalive ... ok
+test mtu::tests::losing_a_path_recomputes_the_mtu ... ok
+test mtu::tests::mss_clamp_leaves_room_for_headers ... ok
+test mtu::tests::overhead_larger_than_path_saturates ... ok
+test mtu::tests::viability_floor_is_the_ipv4_minimum ... ok
+test pacing::tests::pacer_allows_send_when_idle ... ok
+test pacing::tests::pacer_paces_at_configured_rate ... ok
+test pacing::tests::pacer_respects_max_delay ... ok
+test pacing::tests::pacing_controller_per_path ... ok
+test pacing::tests::pacing_controller_forget_and_reset ... ok
+test pacing::tests::pacing_rate_update ... ok
+test pacing::tests::pacing_prevents_burst ... ok
+test placement::tests::latency_sensitive_picks_lowest_delay_healthy ... ok
+test policy::tests::ack_pacing_lifts_capacity_and_therefore_weight ... ok
+test policy::tests::failed_uplink_loses_flows_but_others_keep_theirs ... ok
+test policy::tests::idle_probe_budget_is_enforced_per_uplink ... ok
+test policy::tests::metered_uplink_excluded_until_user_allows ... ok
+test placement::tests::wrh_respects_weights_and_zero_weight ... ok
+test policy::tests::quality_degrades_a_lossy_link ... ok
+test policy::tests::nothing_is_eligible_until_probes_succeed ... ok
+test policy::tests::revision_only_moves_on_real_change ... ok
+test policy::tests::sleep_resume_reprobes_everything ... ok
+test policy::tests::snapshot_places_flows_and_exposes_quanta ... ok
+test ratelimit::tests::delay_for_calculates_wait ... ok
+test ratelimit::tests::token_bucket_allows_burst_then_limits ... ok
+test ratelimit::tests::rate_limiter_per_uplink ... ok
+test rules::tests::adding_an_existing_id_replaces_instead_of_creating_a_duplicate ... ok
+test rules::tests::curated_rules_classify_dns_as_latency_sensitive ... ok
+test rules::tests::duplicate_eligibility_follows_the_rule ... ok
+test rules::tests::port_range_boundaries ... ok
+test rules::tests::edits_bump_revision_for_ipc_events ... ok
+test rules::tests::priority_order_wins_and_pin_beats_class_rules ... ok
+test rules::tests::sni_rules_match_suffix_only ... ok
+test scoring::tests::ewma_moves_toward_observation ... ok
+test scoring::tests::a_window_spanning_a_sleep_gap_does_not_collapse_the_estimate ... ok
+test scoring::tests::ack_pacing_estimates_capacity ... ok
+test scoring::tests::idle_probes_respect_budget ... ok
+test scoring::tests::idle_probes_have_a_cadence ... ok
+test scoring::tests::probe_result_updates_capacity ... ok
+test placement::tests::wrh_only_moves_flows_of_removed_uplink ... ok
+test scoring::tests::score_penalties_monotonic ... ok
+test scoring::tests::traffic_suppresses_the_idle_probe ... ok
+
+test result: ok. 83 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running unittests src/bin/drr-bench.rs (target/debug/deps/drr_bench-7eab01e6ce5a63c1)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/ecn-bench.rs (target/debug/deps/ecn_bench-3b539208f8f8abb5)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/pacing-bench.rs (target/debug/deps/pacing_bench-68d5c3e60d83276a)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/balancify_crypto-5edff73a2bc3b2d6)
+
+running 39 tests
+test handshake::tests::flights_out_of_order_are_refused ... ok
+test handshake::tests::both_sides_derive_the_same_two_transport_keys ... ok
+test handshake::tests::initiator_pinning_checked ... ok
+test handshake::tests::every_part_of_the_first_flight_is_authenticated ... ok
+test handshake::tests::replay_cache_rejects_second_flight ... ok
+test handshake::tests::short_messages_are_refused_rather_than_parsed ... ok
+test handshake::tests::a_fresh_ephemeral_gives_a_fresh_session ... ok
+test handshake::tests::pinning_enforced_on_responder ... ok
+test handshake::tests::the_pinned_identity_is_what_authenticates_the_relay ... ok
+test handshake::tests::the_initiator_identity_travels_encrypted ... ok
+test keys::tests::ephemeral_is_zeroized_on_drop ... ok
+test keys::tests::pinned_keys_basic ... ok
+test handshake::tests::the_prologue_binds_the_handshake_to_its_context ... ok
+test replay::tests::capacity_evicts_oldest ... ok
+test replay::tests::different_ephemerals_are_not_replay ... ok
+test replay::tests::expired_entries_are_not_replay ... ok
+test replay::tests::new_ephemeral_is_not_replay ... ok
+test replay::tests::same_ephemeral_within_window_is_replay ... ok
+test keys::tests::generate_uses_os_rng ... ok
+test store::tests::file_store_rejects_corrupt ... ok
+test store::tests::file_store_does_not_follow_precreated_temp_symlink_and_keeps_key_private ... ok
+test keys::tests::static_keypair_derives_public ... ok
+test store::tests::memory_store_pinned_roundtrips ... ok
+test store::tests::memory_store_generates_and_remembers ... ok
+test tests::a_key_of_the_wrong_length_is_refused ... ok
+test tests::a_flipped_bit_anywhere_in_the_body_is_refused ... ok
+test tests::frame_kind_domain_separates_independent_sequence_lanes ... ok
+test tests::frame_kind_is_in_the_nonce_domain_and_authenticated_header ... ok
+test tests::a_tampered_frame_is_refused_at_the_door_and_counted ... ok
+test tests::path_sequence_salt_and_key_all_separate_the_nonce ... ok
+test store::tests::file_store_roundtrips ... ok
+test tests::rekey_is_one_way ... ok
+test tests::nonces_never_repeat_across_paths_and_sequences ... ok
+test handshake::tests::the_transport_keys_drive_the_tunnel_lane ... ok
+test tests::sealing_hides_the_payload_and_costs_sixteen_bytes ... ok
+test tests::the_header_is_authenticated_so_it_cannot_be_rewritten ... ok
+test tests::transport_keys_rekey ... ok
+test tests::rekey_produces_a_different_key_and_old_frames_fail ... ok
+test tests::the_lane_carries_a_stream_end_to_end_under_the_real_cipher ... ok
+
+test result: ok. 39 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.58s
+
+     Running unittests src/bin/bench.rs (target/debug/deps/crypto_bench-94bfbae87a5a28a5)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/debug/deps/balancify_installer-5348e584327ee78e)
+
+running 12 tests
+test tests::installer_cli_accepts_explicit_journal_and_rejects_ambiguous_args ... ok
+test tests::dry_run_rollback_leaves_existing_sidecar_untouched ... ok
+test tests::journal_rollback_order ... ok
+test tests::journal_write_failure_aborts_install_and_rolls_back ... ok
+test tests::journal_serializes_step_and_rollback_details_with_json_escaping ... ok
+test tests::installer_cli_dry_run_does_not_become_the_journal_path ... ok
+test tests::sbom_sidecar_does_not_fabricate_a_missing_inventory ... ok
+test tests::replacing_existing_sidecar_restores_previous_file_on_rollback ... ok
+test tests::sbom_sidecar_requires_and_copies_the_generated_inventory ... ok
+test tests::spdx3_sidecar_is_copied_and_removed_on_rollback ... ok
+test tests::successful_sidecar_commit_removes_previous_backup ... ok
+test tests::installer_dry_run_succeeds ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running unittests src/bin/clean-machine.rs (target/debug/deps/clean_machine-6f1d04b45ae65ac4)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/balancify_ipc-0617260b910fedfa)
+
+running 18 tests
+test server::tests::idle_timeout_only_closes_unsubscribed_clients ... ok
+test server::tests::fixed_listener_rejects_non_loopback_addresses ... ok
+test server::tests::invalid_payload_gets_bad_request_and_does_not_reach_handler ... ok
+test tests::corrupt_streams_are_rejected ... ok
+test server::tests::serves_fragmented_and_pipelined_binary_requests ... ok
+test tests::every_event_roundtrips ... ok
+test tests::every_request_roundtrips ... ok
+test tests::every_response_roundtrips ... ok
+test tests::framing_roundtrips_and_reports_consumed_bytes ... ok
+test tests::ipc_string_decoder_rejects_invalid_utf8 ... ok
+test tests::partial_frame_means_need_more_bytes_not_error ... ok
+test tests::opcodes_are_stable_and_complete ... ok
+test server::tests::rejects_response_frame_on_request_stream ... ok
+test tests::request_decoder_rejects_trailing_bytes_and_noncanonical_booleans ... ok
+test tests::response_and_event_decoders_reject_trailing_bytes ... ok
+test tests::unicode_and_long_names_survive ... ok
+test tests::truncated_payloads_decode_to_none ... ok
+test server::tests::pushes_event_frames_after_subscription_ack ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running unittests src/main.rs (target/debug/deps/balancify_relay-6befab783ea5bad5)
+
+running 13 tests
+test tests::endpoint_ignores_garbage ... ok
+test tests::endpoint_answers_probes ... ok
+test tests::endpoint_deduplicates_the_duplicate_mode_copy ... ok
+test tests::endpoint_drains_a_gap_after_the_hold_cap ... ok
+test tests::ordered_stream_survives_a_real_udp_socket ... ok
+test tests::relay_session_idle_timer_ignores_unauthenticated_datagrams ... ok
+test tests::secure_handshake_creates_session ... ok
+test tests::secure_relay_rejects_replay ... ok
+test tests::secure_relay_rejects_unpinned_client ... ok
+test tests::two_paths_with_delay_gap_reassemble_in_order ... ok
+test tests::secure_tunnel_after_handshake ... ok
+test tests::secure_relay_enforces_rate_limit_and_session_cap ... ok
+test tests::secure_relay_rate_limits_handshakes_per_ip ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.25s
+
+     Running unittests src/lib.rs (target/debug/deps/balancify_service-2c291775a65aa03c)
+
+running 60 tests
+test driver_device::tests::dequeue_ioctl_matches_the_wdf_control_code_contract ... ok
+test driver_device::tests::inject_ioctl_matches_the_wdf_control_code_contract ... ok
+test driver_device::tests::driver_tx_retries_when_the_service_did_not_schedule_a_send ... ok
+test driver_device::tests::injection_validation_rejects_bad_or_oversized_packets ... ok
+test etw::tests::etw_provider_logs_each_supported_level ... ok
+test driver_device::tests::dequeue_decoder_rejects_truncated_or_malformed_records ... ok
+test etw::tests::event_levels_use_windows_etw_level_codes ... ok
+test packet::tests::fragments_share_a_portless_ipv4_flow_key ... ok
+test driver_device::tests::dequeue_decoder_accepts_empty_and_valid_records ... ok
+test etw::tests::event_ids_are_stable_and_unique ... ok
+test packet::tests::ipv6_fragmented_packets_use_a_consistent_portless_key ... ok
+test packet::tests::ipv6_unfragmented_udp_length_must_cover_exact_payload ... ok
+test packet::tests::parses_ipv4_tcp_and_udp_ports_with_options ... ok
+test packet::tests::parses_ipv6_transport_after_destination_options ... ok
+test packet::tests::rejects_empty_oversized_unknown_version_and_jumbograms ... ok
+test etw::tests::event_message_is_terminated_and_truncation_keeps_valid_utf16 ... ok
+test packet::tests::rejects_malformed_lengths_transport_and_extension_chains ... ok
+test support::tests::json_string_escaping_handles_quotes_slashes_and_controls ... ok
+test support::tests::support_bundle_reports_relay_presence_without_exposing_endpoint ... ok
+test support::tests::bundle_includes_per_path_ecn_delay ... ok
+test tests::a_full_window_holds_the_packet_instead_of_dropping_it ... ok
+test tests::a_nat_rebinding_rekeys_the_path_and_keeps_the_session ... ok
+test tests::a_capacity_sample_lands_on_the_uplink_that_carried_the_data ... ok
+test tests::acknowledgements_reopen_the_window ... ok
+test tests::an_unanswered_probe_is_forgotten_after_the_probe_timeout ... ok
+test tests::adapter_mtu_follows_the_narrowest_live_path ... ok
+test tests::bond_revert_event_carries_the_measured_gain ... ok
+test tests::duplicate_mode_sends_critical_packets_twice ... ok
+test tests::ecn_and_delay_wire_via_ingest ... ok
+test tests::bonded_flow_is_striped_across_both_uplinks ... ok
+test tests::flow_level_mode_keeps_a_flow_on_one_uplink ... ok
+test tests::flow_level_tick_reinjects_unacknowledged_data_on_another_uplink ... ok
+test tests::forged_ack_does_not_refresh_relay_liveness ... ok
+test tests::flow_level_capacity_uses_peer_acknowledgements ... ok
+test tests::ipc_rejects_an_absurd_event_rate ... ok
+test tests::ipc_cannot_mutate_reserved_builtin_rule_ids ... ok
+test tests::ipc_rule_edits_reach_the_classifier ... ok
+test tests::ipc_status_reflects_the_live_system ... ok
+test tests::ipc_support_bundle_returns_complete_redacted_json_over_the_contract ... ok
+test tests::an_idle_peer_session_releases_its_slot ... ok
+test tests::malformed_raw_ip_packet_is_rejected_before_service_state_changes ... ok
+test tests::no_healthy_uplink_refuses_instead_of_black_holing ... ok
+test tests::ipc_telemetry_snapshot_contains_warnings_and_counter_values ... ok
+test tests::metered_uplink_stays_out_until_the_user_allows_it ... ok
+test support::tests::bundle_reports_due_key_update_without_claiming_rotation ... FAILED
+test tests::per_flow_sessions_assign_distinct_ids ... ok
+test tests::per_class_sessions_assign_distinct_ids ... ok
+test tests::probe_reply_becomes_rtt_and_capacity ... ok
+test tests::raw_ip_packet_entry_derives_flow_and_tunnels_original_bytes ... ok
+test tests::relay_failover_convergence_measured ... ok
+test tests::relay_failover_etw_message_contains_no_endpoint ... ok
+test tests::relay_failover_switches_on_timeout ... ok
+test tests::self_test_reports_no_capacity_before_probes ... ok
+test tests::sleep_resume_abandons_dead_state_and_requires_reprobing ... ok
+test tests::tick_emits_keepalives_and_a_bounded_probe ... ok
+test tests::uplink_failover_convergence_measured ... ok
+test tests::rate_limiter_holds_when_over_limit ... ok
+test tests::uplink_loss_fails_over_and_flows_keep_their_affinity ... ok
+test tests::pinning_enforced_rejects_unpinned_relay ... ok
+test tests::secure_handshake_establishes_transport_keys ... ok
+
+failures:
+
+---- support::tests::bundle_reports_due_key_update_without_claiming_rotation stdout ----
+[ETW BalancifyService Info 200] uplink 0 up cap=100000000bps mtu=1500
+
+thread 'support::tests::bundle_reports_due_key_update_without_claiming_rotation' (24133) panicked at crates/service/src/support/mod.rs:343:9:
+assertion failed: bundle.rekey.update_required
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    support::tests::bundle_reports_due_key_update_without_claiming_rotation
+
+test result: FAILED. 59 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+
+error: test failed, to rerun pass `-p balancify-service --lib`
+     Running unittests src/bin/balancify-service.rs (target/debug/deps/balancify_service-8febfe342cf5e1dd)
+
+running 10 tests
+test ipc_capacity_tests::local_ipc_worker_slots_are_bounded_and_released ... ok
+test ipc_capacity_tests::relay_addresses_reject_malformed_configuration ... ok
+test ipc_capacity_tests::insecure_lab_mode_is_debug_only_and_loopback_only ... ok
+test ipc_capacity_tests::relay_identity_parsing_and_pins_fail_closed ... ok
+test ipc_capacity_tests::service_state_directory_requires_an_absolute_secure_root ... ok
+test ipc_capacity_tests::service_requires_authenticated_transport_by_default ... ok
+test ipc_capacity_tests::simulated_packet_scheduler_uses_elapsed_service_time ... ok
+test ipc_capacity_tests::synthetic_udp_packet_is_valid_raw_ipv4_for_service_ingress ... ok
+test ipc_capacity_tests::synthetic_app_traffic_is_confined_to_explicit_insecure_lab_mode ... ok
+test ipc_capacity_tests::udp_datagram_send_reaches_the_requested_local_endpoint ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/compat.rs (target/debug/deps/compat-439afa08dc0db1dc)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/soak.rs (target/debug/deps/soak-bee55ba8ecdc3394)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/throughput.rs (target/debug/deps/throughput-1a7682a7fec4d836)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/e2e.rs (target/debug/deps/e2e-4dcddfe46ad20121)
+
+running 9 tests
+test duplicate_mode_delivers_each_packet_once ... ok
+test flow_level_mode_is_not_held_up_by_the_other_path ... ok
+test reinjection_recovers_lost_packets_inside_the_hold_cap ... ok
+test shell_and_service_speak_contract_v1_over_a_stream ... ok
+test unparseable_datagrams_are_dropped_at_the_door ... ok
+test striped_flow_is_reordered_back_across_a_40ms_delay_gap ... ok
+test unplugging_an_uplink_mid_transfer_keeps_the_stream_alive ... ok
+test a_lossy_path_carries_less_than_a_clean_one ... ok
+test secure_handshake_over_real_udp_delivers_encrypted_stream ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+
+     Running tests/fuzz.rs (target/debug/deps/fuzz-83611f67c2e93225)
+
+running 6 tests
+test fuzz_headers_reject_every_damaged_version_and_kind ... ok
+test fuzz_ipc_requests_are_validated_not_trusted ... ok
+test fuzz_truncations_of_a_valid_frame_never_deliver ... ok
+test fuzz_replayed_frames_deliver_at_most_once ... ok
+test fuzz_ipc_frames_are_length_checked ... ok
+test fuzz_random_datagrams_stay_bounded_and_never_panic ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.96s
+
+     Running tests/rekey_safety.rs (target/debug/deps/rekey_safety-09efd12478b2fc00)
+
+running 1 test
+test threshold_marks_key_update_due_without_unilateral_cipher_rotation ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running unittests src/lib.rs (target/debug/deps/balancify_tunnel-a877f01162711408)
+
+running 35 tests
+test tests::control_frames_carry_no_data_sequence ... ok
+test tests::control_frames_require_authentication_and_reject_replay ... ok
+test tests::a_cumulative_ack_is_credited_to_the_paths_that_carried_the_data ... ok
+test tests::ack_frees_the_retx_window_and_reports_bytes ... ok
+test tests::drr_does_not_hang_on_degenerate_quanta ... ok
+test tests::drr_exclusion_is_used_by_reinjection ... ok
+test tests::drain_releases_a_gap_the_peer_never_filled ... ok
+test tests::drr_cannot_bank_a_burst_after_being_idle ... ok
+test tests::duplicate_mode_reuses_the_sequence_number ... ok
+test tests::drr_proportional_to_quanta ... ok
+test tests::drr_serves_a_path_whose_quantum_is_smaller_than_one_packet ... ok
+test tests::duplicate_policy_rules ... ok
+test tests::every_frame_kind_roundtrips ... ok
+test tests::flow_data_has_a_nonce_sequence_without_gapping_data_and_rejects_replay ... ok
+test tests::forget_path_drops_only_that_paths_retransmit_state ... ok
+test tests::header_rejects_bad_version_and_unknown_kind ... ok
+test tests::header_roundtrip_and_truncation ... ok
+test tests::probe_reply_feeds_path_rtt ... ok
+test tests::receiver_deduplicates_a_double_sent_packet ... ok
+test tests::receiver_caps_session_count ... ok
+test tests::receiver_delivers_in_order_and_acks_progress ... ok
+test tests::receiver_echoes_probes_and_counts_keepalives ... ok
+test tests::receiver_evicts_idle_sessions ... ok
+test tests::receiver_refuses_unknown_sessions_when_not_auto_accepting ... ok
+test tests::receiver_rejects_garbage_and_tampered_frames ... ok
+test tests::reinjection_moves_the_packet_to_another_path ... ok
+test tests::reorder_cap_expiry_does_not_stall_flow ... ok
+test tests::reorder_flags_duplicates ... ok
+test tests::reorder_releases_in_order_and_waits ... ok
+test tests::flow_ack_is_selective_session_scoped_and_bounded ... ok
+test tests::replies_are_decodable_by_the_peer ... ok
+test tests::sender_without_paths_refuses_rather_than_panicking ... ok
+test tests::sender_numbers_and_spreads ... ok
+test tests::retx_window_is_bounded ... ok
+test tests::unacked_flow_data_is_reinjected_and_duplicate_is_reacked_once ... ok
+
+test result: ok. 35 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+error: 1 target failed:
+    `-p balancify-service --lib`

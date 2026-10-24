@@ -7,7 +7,7 @@ User instruction: "continue the development process without stopping to report" 
 
 ## What was done in this continuous session (since ADR-0015)
 
-- ETW wiring for ECN/delay/rekey/failover/auth (Service etw field, ingest_path ECN CE 401 + delay 402 + auth_failed 600, tick rekey 400 + failover 500, relay ecn_echoed + total_ecn_echoed + sweep + stats 6-tuple)
+- ETW wiring for ECN/delay/key-update-due/failover/auth (Service etw field, ingest_path ECN CE 401 + delay 402 + auth_failed 600, tick threshold warning 400 + failover 500, relay ecn_echoed + total_ecn_echoed + sweep + stats 6-tuple; coordinated live rekey remains pending per ADR-0043)
 - Fixed non-ASCII Sec. markers (Sec. instead of Sec., -- instead of --) to avoid Rust 2021 prefix errors (E0308, unknown prefix, unknown start of token \u{a7})
 - Fixed format! escaping (remove backslash+quote) and on_ack_with_rtt arg order (None, now)
 - Support bundle per-path ECN/delay diag (cc methods ecn_ce, delay_events_path, rtt_min, rtt_last, CongestionDiag per_path Vec<PathCongestionDiag> with cwnd/in_flight/ecn_ce/delay_events/rtt_min/last_ms, test bundle_includes_per_path_ecn_delay)
@@ -47,4 +47,4 @@ Current validation: PR CI `39922014929` passed all six jobs; Rust summaries repo
 - Blueprint Sec.4.5 failover, Sec.4.7.4 per-flow sessions, Sec.4.8 dependency policy, Sec.6.1 TAP-like adapter, Sec.6.2 WRH + flow classes, Sec.6.3 capacity, Sec.6.4 DRR + pacing + CC, Sec.6.5 health hysteresis, Sec.6.6 NAT keepalive, Sec.8.2 Diagnostics, Sec.8.3 installer, Sec.9.2 IPC + handshake, Sec.9.3 signing, Sec.9.5 HVCI, Sec.10.1 Rig A/B, Sec.10.3 acceptance rows, Sec.11.2 Wintun exception, S13 SBOM/VEX, S15 HVCI trio
 - ADRs 0003-0041
 - Latest active-branch CI: push `39922008067` and PR `39922014929` success; latest head `02409cf`
-- ADR-0038 through ADR-0041 cover bounded raw-IP ingress, the miniport TX queue, and kernel packet-boundary validation
+- ADR-0038 through ADR-0043 cover secure service startup, bounded raw-IP ingress, miniport TX queue/retry, kernel packet-boundary validation, and coordinated key-update safety

@@ -16,8 +16,8 @@ Implement a driver-owned bounded FIFO and a privileged pull IOCTL:
 - `MiniportSendNetBufferLists` counts and size-checks all NBs in each NBL, reserves enough capacity for the entire batch, copies each NB through `NdisGetDataBuffer` into driver-owned storage, and validates the resulting complete raw IPv4/IPv6 packet. The lock protects producer/consumer state. The queue count advances only after the full NBL batch is copied and validated, so the service never observes a partially published NBL.
 - Successful NDIS completion means the packet batch was accepted into the queue. A full queue completes with `NDIS_STATUS_RESOURCES`; malformed packets fail; packets received while paused complete with `NDIS_STATUS_PAUSED`.
 - `IOCTL_BALANCIFY_DEQUEUE_TX` (`FILE_READ_ACCESS`, `METHOD_BUFFERED`, function `0x804`) returns at most one record: a 16-byte little-endian header (`version: u32`, `packet_length: u32`, `sequence: u64`) followed by the raw IP packet. An empty poll returns `STATUS_SUCCESS` with zero output bytes. A short caller buffer does not dequeue anything.
-- The Rust client opens the control device with read/write access, bounds-checks the output record, revalidates its IP payload, and the service polls a bounded batch every 10 ms before passing packets through `Service::send_ip_packet`.
-- The queue does not persist packets across adapter removal and does not implement durable retries, flow-control signaling beyond `NDIS_STATUS_RESOURCES`, or a reverse TX completion mechanism from relay delivery to NDIS.
+- The Rust client opens the control device with read/write access, bounds-checks the output record, revalidates its IP payload, and the service polls at 10 ms intervals before passing packets through `Service::send_ip_packet`. The service retains one dequeued packet and retries it before reading later packets whenever scheduling returns `Hold` or `Refused`.
+- The kernel queue and user-mode pending slot are volatile and do not survive adapter removal or service restart. There is no durable retry, explicit queue-ready notification, or reverse TX completion mechanism from relay delivery to NDIS.
 
 ## Consequences
 

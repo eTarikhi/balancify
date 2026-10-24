@@ -86,6 +86,10 @@ DPAPI (first-party FFI).
   with zero extra crates, satisfying policy §4.8 (platform SDKs are OS platform,
   not external tools, but we avoid even that by using raw FFI).
 
+## Status update (2026-10-24)
+
+The one-way derivation primitive remains, but the claim that peers can activate it independently was unsafe: packet loss, asymmetric packet counts, and timer skew can leave the endpoints on different key epochs. ADR-0043 supersedes that activation policy. Live cipher rotation is disabled until an authenticated, acknowledged peer-coordination protocol exists.
+
 ## Consequences
 
 - Static keys can now be loaded/generated and pinned keys managed without
@@ -97,9 +101,9 @@ DPAPI (first-party FFI).
 - Replay cache prevents cheap DoS via replayed flight 1, but does not persist
   across restarts — acceptable because ephemeral is fresh per session and window
   is short. Wired into handshake's checked path.
-- Rekey is one-way and deterministic, so both sides can rekey independently
-  after N frames without extra round trips, but they must agree on when to
-  rekey (e.g. every 2^16 frames or every 60 s). Exact policy is next.
+- The one-way derivation is deterministic, but peers cannot safely activate it
+  independently: loss and timer skew can desynchronize their key epochs. This
+  earlier assumption is superseded by the 2026-10-24 status update and ADR-0043.
 - Pacing controller is wired into Service: rate from capacity estimator, delay
   exposed, burst prevention measured. §10.3 added-delay row should improve.
 - Test totals: core 76, crypto 36 (33+3 pinning/replay), service 21, relay 6,

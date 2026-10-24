@@ -161,7 +161,8 @@ def build_document(
             "spdxId": sbom_id,
             "creationInfo": creation_info_id,
             "name": "Balancify source/build dependency inventory",
-            "software_sbomType": "source",
+            # SPDX 3 models an SBOM's type as a set, even for a single value.
+            "software_sbomType": ["source"],
             "element": content_uris,
             "rootElement": root_uris,
             "comment": (

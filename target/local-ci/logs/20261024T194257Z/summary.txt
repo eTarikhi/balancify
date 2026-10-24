@@ -1,0 +1,14 @@
+BalanciFy local CI · profile=full · branch=arena/3f48d354-balancify · HEAD=ac067c8f97a576e91b58d82455328cbb0abe9e3d
+PASS  dependency-policy
+PASS  lab-python-tests
+PASS  ci-python-tests
+PASS  netem-syntax-and-safety
+PASS  portable-driver-tests
+PASS  rust-workspace-tests
+PASS  rust-release-build
+PASS  spdx-validator-install
+PASS  generate-spdx-2
+PASS  validate-spdx-2
+PASS  generate-spdx-3
+FAIL  validate-spdx-3 (exit 1)
+Log: /mnt/c/Users/Administrator/Desktop/Git-Clones/BalanciFy/target/local-ci/logs/20261024T194257Z/validate-spdx-3.log

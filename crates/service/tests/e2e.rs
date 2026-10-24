@@ -622,9 +622,9 @@ fn a_lossy_path_carries_less_than_a_clean_one() {
 /// flows encrypted and is reordered correctly.
 #[test]
 fn secure_handshake_over_real_udp_delivers_encrypted_stream() {
-    use balancify_crypto::{FileKeyStore, KeyStore, PinnedKeys, StaticKeypair};
+    use balancify_crypto::{PinnedKeys, StaticKeypair};
     use balancify_service::ServiceConfig;
-    use balancify_tunnel::{Sender, ReceiverConfig};
+    use balancify_tunnel::ReceiverConfig;
     use std::net::UdpSocket;
     use std::time::{Duration, Instant};
 
